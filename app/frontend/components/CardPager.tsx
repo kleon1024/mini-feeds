@@ -96,11 +96,11 @@ export function CardPager({
   }
   
   return (
-    <section className="flex flex-col items-center w-full max-w-3xl mx-auto space-y-4">
+    <section className="flex flex-col items-center w-full max-w-3xl mx-auto space-y-6">
       {/* 卡片容器 */}
-      <section className="w-full relative px-4 md:px-16">
+      <section className="w-full relative px-4 md:px-8">
         {/* 卡片区域 */}
-        <section className="w-full min-h-[220px] h-auto relative">
+        <section className="w-full min-h-[380px] h-auto relative">
           {memoizedItems.map((item, index) => {
             // 只渲染当前卡片和相邻的卡片，减少DOM节点数量
             if (Math.abs(index - currentIndex) > 1) return null;
@@ -108,16 +108,18 @@ export function CardPager({
             return (
               <article
                 key={item.id}
-                className={`absolute top-0 left-0 w-full transition-all duration-500 ${
+                className={cn(
+                  'absolute top-0 left-0 w-full transition-all duration-500 ease-in-out',
                   index === currentIndex
-                    ? 'opacity-100 translate-x-0 z-10'
+                    ? 'opacity-100 translate-x-0 z-10 scale-100'
                     : index < currentIndex
-                    ? 'opacity-0 -translate-x-full z-0'
-                    : 'opacity-0 translate-x-full z-0'
-                }`}
+                    ? 'opacity-0 -translate-x-full z-0 scale-95'
+                    : 'opacity-0 translate-x-full z-0 scale-95'
+                )}
                 style={{
-                  willChange: 'transform, opacity',
-                  pointerEvents: index === currentIndex ? 'auto' : 'none'
+                  willChange: 'transform, opacity, scale',
+                  pointerEvents: index === currentIndex ? 'auto' : 'none',
+                  transformOrigin: index < currentIndex ? 'left center' : 'right center'
                 }}
               >
                 <FeedCard
@@ -149,11 +151,28 @@ export function CardPager({
       <PagerControls
         currentIndex={currentIndex}
         totalItems={memoizedItems.length}
-        className="mt-4"
+        className="mt-6"
         onPrev={handlePrev}
         onNext={handleNext}
       />
       
+      {/* 进度指示器 */}
+      <div className="flex justify-center items-center gap-1.5 mt-2">
+        {memoizedItems.map((_, index) => (
+          <div 
+            key={index} 
+            className={cn(
+              'w-2 h-2 rounded-full transition-all duration-300',
+              index === currentIndex 
+                ? 'bg-primary w-4' 
+                : 'bg-muted-foreground/30 hover:bg-muted-foreground/50 cursor-pointer'
+            )}
+            onClick={() => setCurrentIndex(index)}
+            role="button"
+            aria-label={`Go to item ${index + 1}`}
+          />
+        ))}
+      </div>
     </section>
   );
 }

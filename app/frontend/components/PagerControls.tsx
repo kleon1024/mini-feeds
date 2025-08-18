@@ -48,13 +48,14 @@ export function PagerControls({
           className={cn(
             'h-12 w-12 rounded-full shadow-md hover:shadow-lg transition-all',
             !canPrev && 'opacity-50 cursor-not-allowed',
-            'bg-background/80 backdrop-blur-sm'
+            'bg-background/80 backdrop-blur-sm border-primary/20',
+            'hover:bg-primary/5 hover:border-primary/30'
           )}
           onClick={handlePrevClick}
           disabled={!canPrev}
           aria-label="上一张"
         >
-          <ChevronLeft size={24} />
+          <ChevronLeft className={cn('h-6 w-6', canPrev ? 'text-primary' : 'text-muted-foreground')} />
         </Button>
       ) : (
         // 占位元素，保持布局平衡
@@ -62,37 +63,12 @@ export function PagerControls({
       )}
 
       {/* 进度指示 */}
-      <section className="flex flex-col items-center">
-        <p className="text-sm font-medium">
-          {currentIndex + 1} / {totalItems}
+      <section className="flex flex-col items-center bg-background/80 backdrop-blur-sm px-4 py-1.5 rounded-full shadow-sm border border-border/50">
+        <p className="text-sm font-medium flex items-center gap-1.5">
+          <span className="text-primary font-semibold">{currentIndex + 1}</span>
+          <span className="text-muted-foreground">/</span>
+          <span>{totalItems}</span>
         </p>
-        <section className="flex gap-1 mt-1">
-          {Array.from({ length: Math.min(totalItems, 5) }).map((_, i) => {
-            // 如果总数超过5个，使用省略号表示
-            const showEllipsis = totalItems > 5 && i === 2;
-            const dotIndex = showEllipsis
-              ? Math.floor(totalItems / 2)
-              : totalItems <= 5
-                ? i
-                : i < 2
-                  ? i
-                  : i + (totalItems - 5);
-
-            return (
-              <span
-                key={i}
-                className={cn(
-                  'h-1.5 rounded-full transition-all',
-                  showEllipsis ? 'w-4' : 'w-2',
-                  dotIndex === currentIndex
-                    ? 'bg-primary'
-                    : 'bg-muted'
-                )}
-                aria-hidden="true"
-              />
-            );
-          })}
-        </section>
       </section>
 
       {/* 下一张按钮 - 仅在有onNext回调时显示 */}
@@ -103,13 +79,14 @@ export function PagerControls({
           className={cn(
             'h-12 w-12 rounded-full shadow-md hover:shadow-lg transition-all',
             !canNext && 'opacity-50 cursor-not-allowed',
-            'bg-background/80 backdrop-blur-sm'
+            'bg-background/80 backdrop-blur-sm border-primary/20',
+            'hover:bg-primary/5 hover:border-primary/30'
           )}
           onClick={handleNextClick}
           disabled={!canNext}
           aria-label="下一张"
         >
-          <ChevronRight size={24} />
+          <ChevronRight className={cn('h-6 w-6', canNext ? 'text-primary' : 'text-muted-foreground')} />
         </Button>
       ) : (
         // 占位元素，保持布局平衡
