@@ -319,41 +319,265 @@ LLM 增强：推荐理由 & 广告文案生成（失败降级）。
 
 简洁直白：注释讲“为什么”，代码讲“怎么做”。
 
-
 ---
 
-风格全盘采用 Next.js + Tailwind + shadcn/ui，不用 MUI。
+角色：你是资深全栈工程师，目标是在最小复杂度下交付一个可教学、可演示、可扩展的文本信息流应用。
+价值观：少依赖、先闭环、风格统一、稳定可测。
+风格：完全采用 shadcn/ui 的基建风格；禁止使用 MUI；卡片仅文字，不做视频组件。
 
-一、产品形态（单卡翻页）
+0. 硬性边界（必须遵守）
 
-视图：居中单卡，固定尺寸（例如 w-[720px] h-[220px]），左右有“上一张 / 下一张”浮动按钮。
+UI 风格：使用 shadcn/ui + TailwindCSS，暗/亮主题自动适配。不要引入 MUI、AntD 等与风格冲突的库。
 
-卡片内容：只展示一行标题（truncate），下方轻量 Meta（类型、时间），右下角点赞/收藏。
+卡片形态：统一尺寸的纯文字卡片（单行标题 + 轻 Meta），单卡翻页（上一张/下一张），不是无限流。
 
-序列：服务端混排后的序列（content / ad / product 都可），前端按 index 切换。
+视频组件：不实现 VideoPlayer 或自动播放相关逻辑。
 
-曝光定义：成为“当前卡片”且停留 ≥ 800ms 记一次曝光；离开时上报停留时长。
+内容：早期仅标题；标签可留空（后续后台人工维护）。
 
-插卡：仍支持按密度（如每 8 张插 1 张 ad 或 product），但序列是离线/请求时确定的。
+算法/广告：由服务端 /api/v1/posts 混排；前端只渲染和上报曝光。
 
-易用性：左右箭头键切卡；空格=点赞，S=收藏；卡片点击进入详情。
+依赖取舍：禁止引入 Airflow/ES/Faiss/Feast/Kafka/K8s 等重件。
 
-二、视觉与样式（必须使用 shadcn/ui）
+1. 技术栈（前端优先 Next.js；允许 Vite 变体）
 
-三、页面与组件（Next.js App Router）
+推荐默认：Next.js (App Router) + TypeScript + Tailwind + shadcn/ui + TanStack Query。
+
+可用 Server Actions / Route Handlers 做轻量 API mock。
+
+可选变体（如明确要求 Vite）：Vite + React + React Router + TanStack Query + Tailwind + shadcn/ui（社区兼容）。
+
+必须在 vite.config.ts 配置后端代理到 FastAPI。
+
+Trae 生成代码时，如无特别说明，一律按 Next.js 模板输出。
+
+2. 后端 & 数据（FastAPI + Postgres）
+
+后端：FastAPI（async）+ SQLAlchemy 2.x + Alembic。
+
+数据库：Postgres 15+（扩展：uuid-ossp, pg_trgm 可选；JSONB 常用）。
+
+可选：Redis（频控/短缓存）、SQLPad（SQL 管理），不作为必须依赖。
+
+2.1 表结构（精简）
+-- app.items：仅标题，标签可空
+id BIGSERIAL PK,
+title TEXT NOT NULL,
+tags JSONB DEFAULT '[]',
+kind TEXT CHECK (kind IN ('content','ad','product')) DEFAULT 'content',
+author_id BIGINT NULL,
+created_at TIMESTAMPTZ DEFAULT now(),
+updated_at TIMESTAMPTZ DEFAULT now();
+
+-- app.events：统一埋点
+id BIGSERIAL PK,
+user_id BIGINT,
+item_id BIGINT,
+event_type TEXT CHECK (event_type IN ('impression','staytime','click','like','favorite')),
+ts TIMESTAMPTZ,
+source TEXT,
+staytime_ms INT,
+extra JSONB;
+
+-- rel.user_entity_relations：点赞/收藏等主动关系
+user_id BIGINT,
+entity_type TEXT,      -- 'item'
+entity_id BIGINT,
+relation_type TEXT,    -- 'like' | 'favorite'
+status TEXT CHECK (status IN ('active','inactive')),
+updated_at TIMESTAMPTZ DEFAULT now(),
+attrs JSONB,
+UNIQUE (user_id, entity_type, entity_id, relation_type) WHERE status='active';
+
+
+索引建议
+events(user_id, ts DESC), events(item_id, ts DESC), events(event_type), items(tags gin jsonb_path_ops)。
+
+3. API 契约（统一 {code,data,msg}）
+3.1 单卡序列（服务端混排）
+GET /api/v1/posts?user_id=&count=10&cursor=&scene=feed&slot=feed_main&debug=0
+Response:
+{
+  "code": 0,
+  "data": {
+    "server_time": "ISO-8601",
+    "cursor": { "next": "opaque_next", "prev": "opaque_prev" },
+    "items": [
+      {
+        "type": "content|ad|product",
+        "id": "post_123",
+        "title": "单行标题",
+        "tags": [],
+        "created_at": "ISO-8601",
+        "score": 0.83,
+        "tracking": { "trace_id": "trc_abc", "event_token": "evt_xxx" }
+      }
+    ]
+  },
+  "msg": ""
+}
+
+
+cursor 用不透明字符串；内部可含 seed/offset/window，保证幂等与可重放。
+
+广告曝光必须在前端“成为当前卡片且≥800ms”后再上报（避免提前计费/频控错位）。
+
+3.2 埋点
+POST /api/v1/events
+{
+  "user_id": "u1",
+  "event_type": "impression|staytime|click|like|favorite",
+  "ts": "ISO-8601",
+  "source": "feed",
+  "staytime_ms": 1234,         // 仅用于 staytime
+  "extra": {
+    "post_type": "content|ad|product",
+    "post_id": 123,
+    "position": 7,
+    "trace_id": "trc_abc"
+  }
+}
+
+3.3 主动关系（点赞/收藏）
+POST /api/v1/relations/upsert
+{
+  "user_id": 1,
+  "entity_type": "item",
+  "entity_id": 123,
+  "relation_type": "like|favorite",
+  "status": "active|inactive"
+}
+
+3.4 内容管理（手动标签为主）
+
+GET/POST /api/v1/items（只需 title；tags 可空）
+
+POST /api/v1/items/:id/tags
+
+4. 前端结构（Next.js App Router）
 /app
-  /(feed)/page.tsx                 # 主页面：单卡阅读器
+  /(feed)/page.tsx
   /(feed)/components/
-    CardPager.tsx                  # 核心容器：管理 index / 翻页 / 预取
-    FeedCard.tsx                   # 渲染单张卡（content|ad|product）
-    LikeButton.tsx                 # 点赞（乐观更新）
-    FavButton.tsx                  # 收藏（乐观更新）
-    PagerControls.tsx              # 上一张/下一张 按钮 + 进度指示
-    ActiveExposure.tsx             # 当前卡片曝光/停留统计 & 上报
-  /item/[id]/page.tsx              # 详情页
-  /admin/content/page.tsx          # 内容管理（标题、手动标签）
-  /admin/strategy/page.tsx         # 策略（插卡密度、首屏广告开关）
-  /debug/inspector/page.tsx        # 最近一次序列与上报查看（可选）
-/lib/api.ts                        # fetch 封装（统一 {code,data,msg}）
-/lib/track.ts                      # 上报工具（Beacon 优先）
+    CardPager.tsx          // 管理 index/翻页/预取/键盘
+    FeedCard.tsx           // 单张卡（content|ad|product）统一壳
+    PagerControls.tsx      // 上一张/下一张按钮 + 进度
+    ActiveExposure.tsx     // 当前卡片的曝光/停留统计与上报
+    LikeButton.tsx         // 点赞（乐观）
+    FavButton.tsx          // 收藏（乐观）
+  /item/[id]/page.tsx      // 详情（文本）
+  /admin/content/page.tsx  // 内容管理（DataTable，手动标签）
+  /admin/strategy/page.tsx // 策略：插卡密度/首屏广告开关（可选）
+  /debug/inspector/page.tsx// 调试（最近序列与上报队列，可选）
+/lib/api.ts                // fetch 封装（{code,data,msg}）+ 错误处理
+/lib/track.ts              // 上报工具（Beacon 优先，失败 keepalive fetch）
 /styles/globals.css
+
+5. UI/样式规范（与 shadcn/ui 对齐）
+
+容器：max-w-[720px] mx-auto px-4
+
+卡片：<Card class="rounded-2xl border bg-card p-6 shadow-sm hover:shadow-md transition w-[720px] h-[220px]">
+
+标题：text-base md:text-lg font-medium truncate
+
+Meta：text-xs text-muted-foreground
+
+差异化：
+
+content：默认样式；卡片左侧可加细色条（主色）
+
+ad：卡片左上角 Badge 标注“广告”
+
+product：右下角可预留价格位（后续补）
+
+控件：所有按钮/弹层/抽屉/菜单使用 shadcn/ui；图标用 lucide-react。
+
+禁止：引入 MUI 或其它与风格冲突的库。
+
+6. 交互与键盘映射
+
+翻页：点击左右按钮或键盘 ArrowLeft/ArrowRight。
+
+点赞：点击 ❤️ 或键盘 Space（可切换）；收藏：点击 ⭐ 或键盘 KeyS。
+
+卡片可点击进入 /item/[id]。
+
+A11y：翻页按钮有 aria-label；当前卡片容器 role="region" + aria-live="polite"。
+
+7. 曝光/停留统计（ActiveExposure）
+
+曝光定义：成为当前展示的卡片且连续停留 ≥ 800ms 触发 impression。
+
+停留：切换离开当前卡片时，上报 staytime_ms（若 <200ms 不上报）。
+
+幂等：同 trace_id + item_id 在一次序列中只上报一次 impression。
+
+发送策略：优先 navigator.sendBeacon，失败回退 fetch({ keepalive:true })；批量合并，1s 或 20 条触发 flush；visibilitychange/pagehide 时强制 flush。
+
+8. 管理后台（/admin，shadcn 风格）
+
+内容管理：DataTable（ID / Title / Kind / Tags / CreatedAt / Actions）
+
+新建只需 title；标签通过 Command + Badge 增删；支持 CSV 批量导入（仅标题列）。
+
+基础策略（可选）：广告密度、首屏广告开关、打散开关。
+
+SQL 管理（可选）：留出入口，后续接 SQLPad 与 FastAPI 执行器。
+
+9. 代码质量与生成规则（Trae 必须遵守）
+
+API 统一响应：所有请求封装在 /lib/api.ts，统一处理 {code,data,msg}；错误弹 Toast。
+
+组件分层：路由页薄；业务逻辑进 CardPager/ActiveExposure 等组件；不要在页面里写长函数。
+
+状态管理：数据请求用 TanStack Query；UI 零碎状态可用本地 state，不引入全局状态库。
+
+乐观更新：点赞/收藏走乐观策略；失败回滚并 Toast。
+
+类型与校验：TS 严格模式；后端使用 Pydantic 模型校验。
+
+测试（最小集）：
+
+前端：对 CardPager 翻页和 ActiveExposure 定时上报做基本测试（可用 Vitest + Testing Library）。
+
+后端：/posts、/events、/relations 的 happy path + 基本校验（pytest + httpx）。
+
+命名与结构：文件/组件命名语义化；样式用 Tailwind 原子类，避免魔法数字。
+
+不引入：MUI/AntD、视频播放器、重型中间件（见 0）。
+
+10. 性能与细节
+
+预取：当 index 接近本页末端（倒数第 3 张）时，预取 cursor.next。
+
+翻页动画：150ms 淡入；按钮 hover 轻微缩放。
+
+网络健壮性：请求失败有重试（指数退避 2 次）；上报失败最多重试 3 次。
+
+监测：可选 /debug/inspector 显示最近序列、active index、trace_id、上报队列与耗时。
+
+11. 交付与验收
+
+首页渲染一张固定尺寸的文本卡片；左右按钮/键盘能流畅翻页。
+
+曝光满足“当前卡片 + 800ms”才触发；停留上报符合阈值；幂等去重有效。
+
+点赞/收藏即时点亮，失败回滚。
+
+/api/v1/posts 能返回 content/ad/product 混排的序列与 cursor。
+
+/admin/content 能新增标题、编辑标签、CSV 导入。
+
+整体 UI 风格统一、干净，符合 shadcn/ui 的“基建风”。
+
+生成代码时的注意
+
+如用户未明确要求 Vite，默认生成 Next.js App Router 实现。
+
+UI 组件全部选用 shadcn/ui；图标用 lucide-react；严禁输出任何 MUI 代码片段。
+
+不输出视频相关组件与样式。
+
+若需要示例数据，请提供最小种子脚本（仅标题），不要引入假图/视频依赖。
+
+——以上为本项目的最终约束。请严格遵守，并在实现中优先保证：一致风格、交互顺手、可教可演示。

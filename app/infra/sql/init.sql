@@ -3,8 +3,8 @@
 -- 创建扩展
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pg_trgm";
--- 注意：pgvector扩展需要在Postgres安装时添加，这里假设已经安装
-CREATE EXTENSION IF NOT EXISTS "vector";
+-- 注意：pgvector扩展需要在Postgres安装时添加，暂时注释掉
+-- CREATE EXTENSION IF NOT EXISTS "vector";
 
 -- 创建Schema
 CREATE SCHEMA IF NOT EXISTS app;
@@ -67,10 +67,10 @@ CREATE TABLE IF NOT EXISTS rel.user_entity_relations (
     PRIMARY KEY (user_id, entity_type, entity_id, relation_type)
 );
 
--- 向量表
+-- 向量表 (使用JSONB类型代替vector，因为bitnami/postgresql:15镜像没有pgvector扩展)
 CREATE TABLE IF NOT EXISTS feature.item_embeddings (
     item_id BIGINT PRIMARY KEY REFERENCES app.items(id),
-    emb vector(384),  -- 可以根据需要调整维度
+    emb JSONB DEFAULT '[]'::jsonb,  -- 使用JSONB存储向量数据
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 

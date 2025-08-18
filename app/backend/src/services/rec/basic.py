@@ -25,7 +25,7 @@ async def get_random_items(db: AsyncSession, count: int, offset: int = 0) -> Lis
     query = (
         select(Item)
         .options(selectinload(Item.author))
-        .where(Item.kind == 'content')
+        # .where(Item.kind == 'content')
         .order_by(func.random())
         .limit(count)
         .offset(offset)
