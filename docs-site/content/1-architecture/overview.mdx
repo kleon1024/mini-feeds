@@ -1,0 +1,151 @@
+---
+title: 项目概览
+description: Mini-Feeds 项目介绍与核心功能概述
+date: 2023-04-01
+published: true
+category: 基础架构
+order: 1
+---
+
+# Mini-Feeds 项目介绍
+
+Mini-Feeds 是一个现代化的信息流应用，旨在提供个性化的内容推荐、搜索、广告和商品服务。本项目采用最小复杂度设计原则，在保证功能完整的同时，确保代码的可维护性和可扩展性。
+
+<Callout type="info" icon="ℹ️">
+  本教程将全面介绍如何构建一个完整的Feeds应用，从基础架构到高级功能，适合有一定开发经验的工程师学习。
+</Callout>
+
+## 核心功能
+
+<Card>
+  <CardHeader>
+    <CardTitle>信息流推荐</CardTitle>
+    <CardDescription>个性化内容推送系统</CardDescription>
+  </CardHeader>
+  <CardContent>
+    信息流是应用的核心，通过个性化算法为用户提供最相关的内容：
+    
+    - 基于用户历史行为的个性化推荐
+    - 多样化内容混合策略
+    - 实时热点内容推送
+    - 基于标签和向量的相似内容推荐
+  </CardContent>
+</Card>
+
+### 搜索功能
+
+强大的搜索功能帮助用户快速找到所需内容：
+
+- 全文检索（基于PostgreSQL的全文搜索）
+- 语义搜索（向量检索）
+- 查询理解与改写（LLM增强）
+- 搜索结果排序与过滤
+
+### 广告系统
+
+<div className="grid grid-cols-1 md:grid-cols-2 gap-4 my-6">
+  <Card>
+    <CardHeader>
+      <CardTitle>智能投放</CardTitle>
+    </CardHeader>
+    <CardContent>
+      基于上下文的广告匹配，实时竞价与定价
+    </CardContent>
+  </Card>
+  <Card>
+    <CardHeader>
+      <CardTitle>效果评估</CardTitle>
+    </CardHeader>
+    <CardContent>
+      广告效果评估与优化，频控与节奏控制
+    </CardContent>
+  </Card>
+</div>
+
+### 商品推荐
+
+无缝集成的商品推荐功能：
+
+- 个性化商品推荐
+- 相关商品推荐
+- 购物车与结算流程
+- 商品详情与评价
+
+## 技术架构
+
+<Steps>
+
+### 前端架构
+
+- **框架**：Next.js (App Router)
+- **语言**：TypeScript
+- **样式**：TailwindCSS + shadcn/ui
+- **状态管理**：React Hooks + TanStack Query
+- **路由**：Next.js App Router
+
+### 后端架构
+
+- **框架**：FastAPI
+- **ORM**：SQLAlchemy 2.0 (async)
+- **迁移**：Alembic
+- **验证**：Pydantic v2
+- **API文档**：OpenAPI (Swagger)
+
+### 数据存储
+
+- **主数据库**：PostgreSQL 15+
+  - 扩展：pgvector, pg_trgm, uuid-ossp
+  - 数据分层：app, rel, feature, search, ads, metrics, ops
+- **缓存**：Redis
+  - 用途：频控、短期缓存、幂等键
+
+</Steps>
+
+## 项目结构
+
+```
+/app
+  /backend
+    /src
+      /api            # FastAPI routers (/api/v1)
+      /core           # config, logging, middlewares, deps
+      /db             # models, schemas, migrations (Alembic)
+      /services       # rec / search / ads / commerce / blend / feature / ops
+      /workers        # jobs：样本、训练、物化视图刷新
+    alembic.ini
+  /frontend
+    /app              # Next.js App Router pages
+    /components
+    /lib              # api client, hooks
+    /styles
+  /infra
+    docker-compose.yml
+    /sql              # init.sql、视图/物化视图/索引脚本
+```
+
+## 交互式组件示例
+
+以下是一些可以在MDX中使用的交互式组件示例：
+
+<div className="flex space-x-4 my-6">
+  <Button>默认按钮</Button>
+  <Button variant="secondary">次要按钮</Button>
+  <Button variant="destructive">危险按钮</Button>
+  <Button variant="outline">轮廓按钮</Button>
+</div>
+
+## 开发原则
+
+1. **最小复杂度**：优先使用简单、成熟的技术方案，避免过早引入复杂组件
+2. **闭环优先**：先确保基本功能闭环，再逐步增强
+3. **复用优先**：尽量复用现有组件和库，减少自研
+4. **可测试性**：代码设计应便于单元测试和集成测试
+5. **性能优先**：关注P50延迟，优先通过缓存、索引等方式优化性能
+
+<Callout type="warning" icon="⚠️">
+  在开发过程中，请遵循项目的代码规范和提交规范，确保代码质量和一致性。
+</Callout>
+
+## 下一步
+
+在接下来的章节中，我们将详细介绍技术栈选择、数据模型设计、API契约设计以及环境搭建等内容，为构建完整的Feeds应用奠定基础。

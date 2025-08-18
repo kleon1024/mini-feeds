@@ -1,0 +1,36 @@
+{
+  "Index": {
+    "title": "Mini Feeds 使用手册",
+    "subtitle": "全面教学指南",
+    "description": "全面介绍如何构建现代化的Feeds应用，包括推荐、搜索、广告、商城、营销、大模型、客服等核心功能",
+    "startLearning": "开始学习",
+    "projectOverview": "项目概览",
+    "contentDirectory": "内容目录",
+    "comprehensiveTutorial": "从基础到高级的全面教程",
+    "developmentProcess": "从基础架构到高级功能，全面覆盖Mini Feeds应用的开发流程",
+    "browseAll": "浏览全部",
+    "quickStart": "快速上手",
+    "quickStartDesc": "从零开始，快速搭建一个基础的Feeds应用",
+    "deepLearning": "深入学习",
+    "deepLearningDesc": "掌握推荐系统、搜索引擎和广告系统的核心原理",
+    "practicalCases": "实战案例",
+    "practicalCasesDesc": "通过实际案例学习如何构建完整的应用",
+    "footer": "Mini Feeds 团队. 保留所有权利.",
+    "docs": "文档",
+    "faq": "常见问题"
+  },
+  "Navigation": {
+    "browseDocs": "浏览文档",
+    "language": "语言"
+  },
+  "Categories": {
+    "architecture": "基础架构",
+    "coreFeatures": "核心功能",
+    "recommendation": "推荐系统",
+    "searchAds": "搜索与广告",
+    "commerceMarketing": "商城与营销",
+    "llmApplications": "大模型应用",
+    "advancedTopics": "高级主题",
+    "appendix": "附录"
+  }
+}

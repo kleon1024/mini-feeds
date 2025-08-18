@@ -1,0 +1,36 @@
+{
+  "Index": {
+    "title": "Mini Feeds Documentation",
+    "subtitle": "Comprehensive Guide",
+    "description": "Comprehensive introduction to building a modern Feeds application, including recommendation, search, advertising, e-commerce, marketing, large models, and customer service core functions",
+    "startLearning": "Start Learning",
+    "projectOverview": "Project Overview",
+    "contentDirectory": "Content Directory",
+    "comprehensiveTutorial": "From Basics to Advanced: A Comprehensive Tutorial",
+    "developmentProcess": "From infrastructure to advanced features, covering the entire development process of Mini Feeds application",
+    "browseAll": "Browse All",
+    "quickStart": "Quick Start",
+    "quickStartDesc": "Start from scratch and quickly build a basic Feeds application",
+    "deepLearning": "Deep Learning",
+    "deepLearningDesc": "Master the core principles of recommendation systems, search engines, and advertising systems",
+    "practicalCases": "Practical Cases",
+    "practicalCasesDesc": "Learn how to build a complete application through real cases",
+    "footer": "Mini Feeds Team. All rights reserved.",
+    "docs": "Documentation",
+    "faq": "FAQ"
+  },
+  "Navigation": {
+    "browseDocs": "Browse Docs",
+    "language": "Language"
+  },
+  "Categories": {
+    "architecture": "Architecture",
+    "coreFeatures": "Core Features",
+    "recommendation": "Recommendation System",
+    "searchAds": "Search & Ads",
+    "commerceMarketing": "Commerce & Marketing",
+    "llmApplications": "LLM Applications",
+    "advancedTopics": "Advanced Topics",
+    "appendix": "Appendix"
+  }
+}

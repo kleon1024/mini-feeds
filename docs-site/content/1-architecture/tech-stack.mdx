@@ -1,0 +1,231 @@
+---
+title: 技术栈选择
+description: Mini-Feeds 项目技术栈选择与原因
+date: 2023-04-02
+published: true
+category: 基础架构
+order: 2
+---
+
+# 技术栈选择
+
+在构建Mini-Feeds应用时，我们精心选择了一套现代化、高效且易于维护的技术栈。本章将详细介绍各个技术选型的原因及其在项目中的应用。
+
+## 前端技术栈
+
+<div className="grid grid-cols-1 md:grid-cols-2 gap-6 my-8">
+  <Card>
+    <CardHeader>
+      <CardTitle>Next.js (App Router)</CardTitle>
+    </CardHeader>
+    <CardContent>
+      <ul className="list-disc pl-5 space-y-2">
+        <li>服务端渲染：提供更好的首屏加载性能和SEO支持</li>
+        <li>App Router：基于React Server Components的新路由系统</li>
+        <li>零配置：内置TypeScript、路由、构建优化等功能</li>
+        <li>增量静态再生成：结合静态生成和服务端渲染的优势</li>
+      </ul>
+    </CardContent>
+  </Card>
+  
+  <Card>
+    <CardHeader>
+      <CardTitle>TypeScript</CardTitle>
+    </CardHeader>
+    <CardContent>
+      <ul className="list-disc pl-5 space-y-2">
+        <li>类型安全：在编译时捕获潜在错误</li>
+        <li>开发体验：提供更好的代码补全和文档</li>
+        <li>可维护性：使代码更易于理解和重构</li>
+      </ul>
+    </CardContent>
+  </Card>
+</div>
+
+### TailwindCSS + shadcn/ui
+
+<Callout type="info">
+  shadcn/ui 不是一个组件库，而是一套基于 Radix UI 和 Tailwind CSS 的组件集合，提供了高度可定制的组件，可以直接复制到项目中使用。
+</Callout>
+
+**选择理由**：
+- **原子化CSS**：提高开发效率，减少CSS文件大小
+- **一致性**：确保UI设计的一致性
+- **可定制性**：易于根据项目需求定制
+- **shadcn/ui**：提供高质量、可定制的组件，非黑盒设计
+
+<div className="flex flex-wrap gap-4 my-6">
+  <Button>默认按钮</Button>
+  <Button variant="secondary">次要按钮</Button>
+  <Button variant="outline">轮廓按钮</Button>
+  <Button variant="ghost">幽灵按钮</Button>
+  <Button variant="link">链接按钮</Button>
+  <Button variant="destructive">危险按钮</Button>
+</div>
+
+### TanStack Query
+
+**选择理由**：
+- **数据获取**：简化API调用和数据管理
+- **缓存**：智能缓存减少不必要的网络请求
+- **状态同步**：自动处理加载、错误和重试逻辑
+
+## 后端技术栈
+
+<Steps>
+
+### FastAPI
+
+**选择理由**：
+- **性能**：基于Starlette和Pydantic，提供极高的性能
+- **异步支持**：原生支持异步编程
+- **自动文档**：自动生成OpenAPI文档
+- **类型提示**：与Python类型注解深度集成
+
+### SQLAlchemy 2.0 (async)
+
+**选择理由**：
+- **异步支持**：SQLAlchemy 2.0提供完整的异步支持
+- **类型安全**：改进的类型提示系统
+- **表达能力**：强大的查询构建能力
+- **生态系统**：丰富的插件和扩展
+
+### Alembic
+
+**选择理由**：
+- **数据库迁移**：管理数据库架构变更
+- **与SQLAlchemy集成**：无缝配合SQLAlchemy
+- **版本控制**：迁移脚本可以版本控制
+
+### Pydantic v2
+
+**选择理由**：
+- **数据验证**：强大的数据验证功能
+- **性能**：v2版本性能大幅提升
+- **与FastAPI集成**：无缝配合FastAPI
+
+</Steps>
+
+## 数据存储
+
+### PostgreSQL 15+
+
+<Card>
+  <CardHeader>
+    <CardTitle>选择理由</CardTitle>
+  </CardHeader>
+  <CardContent>
+    <ul className="list-disc pl-5 space-y-2">
+      <li>功能丰富：支持JSON、全文搜索、地理信息等</li>
+      <li>扩展性：丰富的扩展生态</li>
+      <li>可靠性：强大的事务支持和数据完整性</li>
+      <li>单一数据库：减少系统复杂性</li>
+    </ul>
+  </CardContent>
+  <CardFooter>
+    <p className="text-sm text-muted-foreground">关键扩展：pgvector、pg_trgm、uuid-ossp</p>
+  </CardFooter>
+</Card>
+
+### Redis
+
+**选择理由**：
+- **高性能**：内存数据存储，极低延迟
+- **多功能**：支持多种数据结构
+- **原子操作**：支持复杂的原子操作
+
+**应用场景**：
+- 频率控制（广告展示）
+- 短期缓存
+- 幂等键存储
+- 分布式锁
+
+## 机器学习组件
+
+<div className="grid grid-cols-1 md:grid-cols-3 gap-4 my-6">
+  <Card>
+    <CardHeader>
+      <CardTitle>LightGBM/XGBoost</CardTitle>
+    </CardHeader>
+    <CardContent>
+      <ul className="list-disc pl-5 space-y-1">
+        <li>高效的梯度提升实现</li>
+        <li>特征重要性分析</li>
+        <li>支持多种目标函数</li>
+      </ul>
+    </CardContent>
+  </Card>
+  
+  <Card>
+    <CardHeader>
+      <CardTitle>pgvector</CardTitle>
+    </CardHeader>
+    <CardContent>
+      <ul className="list-disc pl-5 space-y-1">
+        <li>与PostgreSQL集成</li>
+        <li>向量存储和检索</li>
+        <li>IVFFlat索引支持</li>
+      </ul>
+    </CardContent>
+  </Card>
+  
+  <Card>
+    <CardHeader>
+      <CardTitle>MLflow</CardTitle>
+    </CardHeader>
+    <CardContent>
+      <ul className="list-disc pl-5 space-y-1">
+        <li>实验追踪记录</li>
+        <li>模型版本管理</li>
+        <li>简化部署流程</li>
+      </ul>
+    </CardContent>
+  </Card>
+</div>
+
+## 大模型集成
+
+### OpenAI/Anthropic API 或 Ollama
+
+**选择理由**：
+- **灵活性**：可选云API或本地部署
+- **功能丰富**：支持文本生成、嵌入等
+- **性能**：高质量的生成结果
+
+**应用场景**：
+- 内容生成
+- 推荐理由生成
+- 查询理解与改写
+- 智能客服对话
+
+<Callout type="warning" icon="⚠️">
+  大模型仅作为增强功能，不阻塞主链路。在大模型API不可用时，系统应该能够降级到基础功能。
+</Callout>
+
+## 开发与部署工具
+
+### Docker & Docker Compose
+
+**选择理由**：
+- **环境一致性**：确保开发和生产环境一致
+- **简化部署**：一键启动所有服务
+- **隔离性**：服务之间相互隔离
+
+### SQLPad
+
+**选择理由**：
+- **SQL管理**：可视化SQL编辑和执行
+- **轻量级**：不需要复杂的设置
+- **结果可视化**：直观展示查询结果
+
+## 技术栈选择原则
+
+在选择技术栈时，我们遵循以下原则：
+
+1. **最小复杂度**：优先选择简单、成熟的技术，避免不必要的复杂性
+2. **单一责任**：每个组件专注于解决特定问题
+3. **可替换性**：组件之间松耦合，便于未来替换
+4. **开发效率**：提高团队开发效率的工具优先
+5. **性能考虑**：关注关键路径的性能表现
+
+通过这套精心选择的技术栈，我们能够构建一个高性能、可维护且易于扩展的Feeds应用。在接下来的章节中，我们将深入探讨如何利用这些技术实现具体功能。
