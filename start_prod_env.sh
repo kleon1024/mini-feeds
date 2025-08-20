@@ -11,6 +11,24 @@ echo "项目根目录: $PROJECT_ROOT"
 # 启动Docker容器（所有组件）
 echo "\n1. 启动Docker容器（PostgreSQL、Redis、Adminer、SQLPad）..."
 cd "$PROJECT_ROOT/app/infra"
+
+# 检查是否存在数据卷，如果存在则提示用户是否要清空
+if docker volume ls | grep -q "infra_postgres_data"; then
+    echo "检测到已存在的数据卷。PostgreSQL容器只在首次启动时执行初始化脚本。"
+    echo "如果您修改了初始化脚本(如metrics_seed.sql)，建议清空数据卷以重新执行。"
+    read -p "是否清空数据卷并重新初始化？(y/n) " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        echo "正在清空数据卷..."
+        docker-compose -f docker-compose.prod.yml down --volumes 2>/dev/null || true
+        docker volume rm infra_postgres_data infra_redis_data infra_sqlpad_data 2>/dev/null || true
+        echo "✓ 数据卷已清空，将重新执行初始化脚本"
+    else
+        echo "! 保留现有数据卷，初始化脚本可能不会重新执行"
+    fi
+fi
+
+# 启动容器
 docker-compose -f docker-compose.prod.yml up -d
 
 # 等待数据库准备就绪
@@ -104,6 +122,6 @@ echo "前端服务已启动，PID: $(cat frontend.pid)"
 echo "\n=== Mini Feeds 生产环境启动完成 ==="
 echo "\n访问地址："
 echo "- 前端: http://localhost:3000"
-echo "- 后端API: http://localhost:8000/docs"
+echo "- 后端API: http://localhost:8000/docs/1-architecture/system-overview"
 echo "- Adminer: http://localhost:8080 (服务器: postgres, 用户名: postgres, 密码: postgres, 数据库: mini_feeds)"
 echo "- SQLPad: http://localhost:3010 (用户名: admin@example.com, 密码: admin)"

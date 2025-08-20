@@ -1,0 +1,508 @@
+---
+title: 后端架构
+description: Mini-Feeds 后端服务设计与API契约
+date: 2023-04-04
+published: true
+category: 基础架构
+order: 4
+---
+
+Mini-Feeds的后端采用现代化的异步架构，提供高性能、可扩展的API服务。本章将详细介绍后端架构的各个方面，包括技术选型、API设计和业务逻辑实现。
+
+## 技术栈概览
+
+<Steps>
+
+### 核心框架：FastAPI
+
+**选择理由**：
+- **性能**：基于Starlette和Pydantic，提供极高的性能
+- **异步支持**：原生支持异步编程
+- **自动文档**：自动生成OpenAPI文档
+- **类型提示**：与Python类型注解深度集成
+
+**实际应用**：
+- 构建RESTful API
+- 利用依赖注入系统管理共享依赖
+- 使用中间件处理跨域、日志和错误
+
+### ORM：SQLAlchemy 2.0 (async)
+
+**选择理由**：
+- **异步支持**：SQLAlchemy 2.0提供完整的异步支持
+- **类型安全**：改进的类型提示系统
+- **表达能力**：强大的查询构建能力
+- **生态系统**：丰富的插件和扩展
+
+**实际应用**：
+- 定义数据模型和关系
+- 构建复杂查询
+- 管理数据库连接池
+
+### 数据验证：Pydantic v2
+
+**选择理由**：
+- **数据验证**：强大的数据验证功能
+- **性能**：v2版本性能大幅提升
+- **与FastAPI集成**：无缝配合FastAPI
+
+**实际应用**：
+- 定义请求和响应模型
+- 验证输入数据
+- 转换数据类型
+
+### 数据库迁移：Alembic
+
+**选择理由**：
+- **数据库迁移**：管理数据库架构变更
+- **与SQLAlchemy集成**：无缝配合SQLAlchemy
+- **版本控制**：迁移脚本可以版本控制
+
+**实际应用**：
+- 创建初始数据库架构
+- 管理架构变更
+- 应用和回滚迁移
+
+</Steps>
+
+## 后端目录结构
+
+```
+/backend
+  /src
+    /api                # API路由
+      /v1              # API版本
+        /posts.py      # 信息流相关接口
+        /events.py     # 事件上报接口
+        /items.py      # 内容管理接口
+        /relations.py  # 用户关系接口
+        /search.py     # 搜索接口
+        /ads.py        # 广告接口
+        /ops.py        # 运维接口
+    /core              # 核心配置
+      /config.py       # 应用配置
+      /logging.py      # 日志配置
+      /middlewares.py  # 中间件
+      /deps.py         # 依赖注入
+      /errors.py       # 错误处理
+    /db                # 数据库相关
+      /models/         # SQLAlchemy模型
+      /schemas/        # Pydantic模型
+      /migrations/     # Alembic迁移
+      /session.py      # 数据库会话
+      /repositories/   # 数据访问层
+    /services          # 业务逻辑
+      /rec/            # 推荐服务
+      /search/         # 搜索服务
+      /ads/            # 广告服务
+      /commerce/       # 商品服务
+      /blend/          # 混排服务
+      /feature/        # 特征服务
+      /ops/            # 运维服务
+    /workers           # 后台任务
+      /sample/         # 样本生成
+      /training/       # 模型训练
+      /refresh/        # 物化视图刷新
+    /main.py           # 应用入口
+  /alembic.ini         # Alembic配置
+  /requirements.txt    # 依赖列表
+```
+
+## 核心数据模型
+
+<div className="grid grid-cols-1 gap-6 my-8">
+  <Card>
+    <CardHeader>
+      <CardTitle>业务表（app schema）</CardTitle>
+    </CardHeader>
+    <CardContent>
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="border-b">
+              <th className="text-left p-2">表名</th>
+              <th className="text-left p-2">描述</th>
+              <th className="text-left p-2">主要字段</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-b">
+              <td className="p-2">app.users</td>
+              <td className="p-2">用户信息</td>
+              <td className="p-2">id, username, tags, created_at, updated_at</td>
+            </tr>
+            <tr className="border-b">
+              <td className="p-2">app.items</td>
+              <td className="p-2">内容/广告/商品</td>
+              <td className="p-2">id, title, content, tags, author_id, media, kind, created_at, updated_at</td>
+            </tr>
+            <tr className="border-b">
+              <td className="p-2">app.events</td>
+              <td className="p-2">用户行为事件</td>
+              <td className="p-2">id, user_id, item_id, event_type, ts, source, staytime_ms, gmv_amount, extra</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </CardContent>
+  </Card>
+
+  <Card>
+    <CardHeader>
+      <CardTitle>关系表（rel schema）</CardTitle>
+    </CardHeader>
+    <CardContent>
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="border-b">
+              <th className="text-left p-2">表名</th>
+              <th className="text-left p-2">描述</th>
+              <th className="text-left p-2">主要字段</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-b">
+              <td className="p-2">rel.user_entity_relations</td>
+              <td className="p-2">用户与实体的关系</td>
+              <td className="p-2">user_id, entity_type, entity_id, relation_type, status, strength, score, last_interact_at, expire_at, attrs</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </CardContent>
+  </Card>
+
+  <Card>
+    <CardHeader>
+      <CardTitle>特征表（feature schema）</CardTitle>
+    </CardHeader>
+    <CardContent>
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="border-b">
+              <th className="text-left p-2">表名</th>
+              <th className="text-left p-2">描述</th>
+              <th className="text-left p-2">主要字段</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-b">
+              <td className="p-2">feature.item_embeddings</td>
+              <td className="p-2">内容向量表示</td>
+              <td className="p-2">item_id, emb, updated_at</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </CardContent>
+  </Card>
+
+  <Card>
+    <CardHeader>
+      <CardTitle>搜索表（search schema）</CardTitle>
+    </CardHeader>
+    <CardContent>
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="border-b">
+              <th className="text-left p-2">表名</th>
+              <th className="text-left p-2">描述</th>
+              <th className="text-left p-2">主要字段</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-b">
+              <td className="p-2">search.item_ft</td>
+              <td className="p-2">全文检索物化视图</td>
+              <td className="p-2">item_id, tsv</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </CardContent>
+  </Card>
+</div>
+
+## API契约设计
+
+### 统一响应格式
+
+所有API接口都遵循统一的响应格式：
+
+```json
+{
+  "code": 0,       // 0表示成功，非0表示错误
+  "data": {},     // 响应数据
+  "msg": ""      // 错误消息
+}
+```
+
+### 核心API接口
+
+#### 1. 信息流接口
+
+```
+GET /api/v1/posts
+```
+
+**请求参数**：
+- user_id：用户ID（或使用header x-user-id）
+- count：返回数量（≤50）
+- cursor：分页游标
+- scene：场景（feed, discover等）
+- slot：位置（feed_main等）
+- device：设备信息
+- geo：地理位置
+- ab：AB测试参数
+- debug：调试模式
+
+**响应示例**：
+
+```json
+{
+  "code": 0,
+  "data": {
+    "server_time": "2023-04-04T12:34:56Z",
+    "cursor": "opaque_cursor_string",
+    "items": [
+      {
+        "type": "content",
+        "id": "123",
+        "score": 0.87,
+        "position": 1,
+        "reason": "根据你的兴趣推荐",
+        "tracking": {
+          "event_token": "evt_abc123",
+          "trace_id": "trc_xyz789"
+        },
+        "content": {
+          "title": "内容标题",
+          "tags": ["科技", "AI"],
+          "created_at": "2023-04-03T10:30:00Z"
+        }
+      },
+      {
+        "type": "ad",
+        "id": "ad_456",
+        "score": 0.75,
+        "position": 2,
+        "tracking": {
+          "event_token": "evt_def456",
+          "trace_id": "trc_uvw456"
+        },
+        "ad": {
+          "title": "广告标题",
+          "advertiser": "品牌名称",
+          "landing_url": "https://example.com/landing"
+        }
+      }
+    ]
+  },
+  "msg": ""
+}
+```
+
+#### 2. 事件上报接口
+
+```
+POST /api/v1/events
+```
+
+**请求体**：
+
+```json
+{
+  "user_id": "u123",
+  "event_type": "impression",
+  "ts": "2023-04-04T12:35:00Z",
+  "source": "feed",
+  "staytime_ms": 1500,
+  "extra": {
+    "post_type": "content",
+    "post_id": 123,
+    "position": 1,
+    "trace_id": "trc_xyz789"
+  }
+}
+```
+
+**响应示例**：
+
+```json
+{
+  "code": 0,
+  "data": {
+    "success": true
+  },
+  "msg": ""
+}
+```
+
+#### 3. 用户关系接口
+
+```
+POST /api/v1/relations/upsert
+```
+
+**请求体**：
+
+```json
+{
+  "user_id": 123,
+  "entity_type": "item",
+  "entity_id": 456,
+  "relation_type": "like",
+  "status": "active"
+}
+```
+
+**响应示例**：
+
+```json
+{
+  "code": 0,
+  "data": {
+    "success": true
+  },
+  "msg": ""
+}
+```
+
+## 业务逻辑实现
+
+### 推荐系统流程
+
+<Steps>
+
+### 召回阶段
+
+从多个来源获取候选内容：
+
+- **标签聚合**：基于用户兴趣标签匹配内容
+- **协同过滤**：使用implicit库实现ItemCF/ALS
+- **向量检索**：使用pgvector查找相似内容
+- **热门内容**：基于全局热度指标
+
+### 排序阶段
+
+对候选内容进行精排：
+
+- **特征构建**：用户特征、内容特征、上下文特征
+- **模型预测**：使用LightGBM/XGBoost模型预测点击概率
+- **模型加载**：从MLflow加载production版本模型
+
+### 混排阶段
+
+将不同类型的内容混合展示：
+
+- **分数归一化**：统一不同来源内容的分数
+- **位置策略**：控制广告、商品的展示位置
+- **密度控制**：控制广告密度（如1/5）
+- **去重过滤**：避免重复内容
+- **负反馈过滤**：过滤用户已拉黑的内容
+
+</Steps>
+
+## 错误处理与日志
+
+### 统一异常处理
+
+```python
+# core/errors.py 示例
+from fastapi import Request, status
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+
+class APIError(Exception):
+    def __init__(self, code: int, msg: str):
+        self.code = code
+        self.msg = msg
+        super().__init__(self.msg)
+
+async def api_error_handler(request: Request, exc: APIError):
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content={
+            "code": exc.code,
+            "data": None,
+            "msg": exc.msg
+        }
+    )
+
+async def validation_error_handler(request: Request, exc: RequestValidationError):
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content={
+            "code": 400,
+            "data": None,
+            "msg": f"参数验证错误: {str(exc)}"
+        }
+    )
+```
+
+### 结构化日志
+
+```python
+# core/logging.py 示例
+import json
+import logging
+import time
+from fastapi import Request, Response
+from starlette.middleware.base import BaseHTTPMiddleware
+
+class LoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        request_id = request.headers.get("x-request-id", "")
+        if not request_id:
+            request_id = f"req_{int(time.time() * 1000)}"
+            request.headers.__dict__["_list"].append(
+                (b"x-request-id", request_id.encode())
+            )
+            
+        start_time = time.time()
+        
+        try:
+            response = await call_next(request)
+            process_time = time.time() - start_time
+            
+            log_dict = {
+                "ts": time.time(),
+                "level": "info",
+                "request_id": request_id,
+                "method": request.method,
+                "path": request.url.path,
+                "status": response.status_code,
+                "latency_ms": round(process_time * 1000, 2)
+            }
+            
+            # 添加用户ID（如果有）
+            user_id = request.headers.get("x-user-id")
+            if user_id:
+                log_dict["user_id"] = user_id
+                
+            logging.info(json.dumps(log_dict))
+            
+            return response
+        except Exception as e:
+            process_time = time.time() - start_time
+            
+            log_dict = {
+                "ts": time.time(),
+                "level": "error",
+                "request_id": request_id,
+                "method": request.method,
+                "path": request.url.path,
+                "error": str(e),
+                "latency_ms": round(process_time * 1000, 2)
+            }
+            
+            logging.error(json.dumps(log_dict))
+            raise
+```
+
+## 下一步
+
+了解了后端架构后，我们将在下一章中探讨[数据存储](/docs/1-architecture/data-storage)，包括数据模型设计、索引策略和缓存机制。

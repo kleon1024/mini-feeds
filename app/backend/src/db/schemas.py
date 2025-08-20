@@ -2,6 +2,12 @@ from typing import Optional, List, Dict, Any, Union
 from datetime import datetime
 from pydantic import BaseModel, Field
 
+# API响应模型
+class ApiResponse(BaseModel):
+    code: int = 0
+    data: Any = None
+    msg: str = ""
+
 # 基础模型
 class BaseSchema(BaseModel):
     class Config:

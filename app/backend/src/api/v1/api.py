@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from src.api.v1.endpoints import posts, events, items, relations, search, ads, ops
+from src.api.v1.endpoints import posts, events, items, relations, search, ads, ops, metrics
 
 api_router = APIRouter()
 
@@ -12,3 +12,4 @@ api_router.include_router(relations.router, prefix="/relations", tags=["relation
 api_router.include_router(search.router, prefix="/search", tags=["search"])
 api_router.include_router(ads.router, prefix="/ads", tags=["ads"])
 api_router.include_router(ops.router, prefix="/ops", tags=["ops"])
+api_router.include_router(metrics.router, prefix="/metrics", tags=["metrics"])

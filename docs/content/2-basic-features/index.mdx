@@ -1,0 +1,87 @@
+---
+title: 基础功能
+description: Mini-Feeds 基础功能概述
+date: 2023-04-03
+published: true
+category: 基础功能
+order: 1
+---
+
+# 基础功能
+
+本章节将介绍Mini-Feeds的基础功能实现，分为以下几个部分：
+
+## 章节概览
+
+<div className="grid grid-cols-1 md:grid-cols-2 gap-6 my-8">
+  <Card>
+    <CardHeader>
+      <CardTitle>Feeds流</CardTitle>
+    </CardHeader>
+    <CardContent>
+      <p>支持内容、广告、商品的混排展现，实现统一的信息流接口，提供个性化内容推送。</p>
+      <div className="mt-4">
+        <Link href="/docs/2-basic-features/feeds-stream" className="text-sm text-primary hover:underline">
+          查看详情 →
+        </Link>
+      </div>
+    </CardContent>
+  </Card>
+  
+  <Card>
+    <CardHeader>
+      <CardTitle>用户交互系统</CardTitle>
+    </CardHeader>
+    <CardContent>
+      <p>实现点赞、收藏、关注等用户交互功能，支持乐观更新和状态同步。</p>
+      <div className="mt-4">
+        <Link href="/docs/2-basic-features/user-interaction" className="text-sm text-primary hover:underline">
+          查看详情 →
+        </Link>
+      </div>
+    </CardContent>
+  </Card>
+
+  <Card>
+    <CardHeader>
+      <CardTitle>用户埋点</CardTitle>
+    </CardHeader>
+    <CardContent>
+      <p>统一的事件追踪系统，记录曝光、点击、停留时间等用户行为数据。</p>
+      <div className="mt-4">
+        <Link href="/docs/2-basic-features/event-tracking" className="text-sm text-primary hover:underline">
+          查看详情 →
+        </Link>
+      </div>
+    </CardContent>
+  </Card>
+  
+  <Card>
+    <CardHeader>
+      <CardTitle>基础指标看板</CardTitle>
+    </CardHeader>
+    <CardContent>
+      <p>构建核心业务指标监控系统，展示CTR、用户活跃度、内容分发等关键指标。</p>
+      <div className="mt-4">
+        <Link href="/docs/2-basic-features/metrics-dashboard" className="text-sm text-primary hover:underline">
+          查看详情 →
+        </Link>
+      </div>
+    </CardContent>
+  </Card>
+</div>
+
+## 功能架构
+
+<Callout type="info">
+  基础功能模块是Mini-Feeds系统的核心部分，为推荐系统、搜索广告和大模型应用等高级功能提供基础支持。
+</Callout>
+
+基础功能模块之间的关系如下：
+
+1. **Feeds流**：系统的核心展示层，负责将内容、广告和商品以统一的方式呈现给用户
+2. **用户交互系统**：捕获用户的主动行为（如点赞、收藏），并更新用户与内容的关系
+3. **用户埋点**：记录用户的被动行为（如曝光、停留时间），为推荐和广告系统提供数据支持
+4. **基础指标看板**：基于埋点数据构建业务指标，监控系统运行状况
+
+在接下来的章节中，我们将详细介绍每个功能模块的设计思路、实现方式和关键代码。

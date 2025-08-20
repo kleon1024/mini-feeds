@@ -1,0 +1,262 @@
+---
+title: 用户交互系统
+description: 实现点赞、收藏等用户交互功能
+date: 2023-04-04
+published: true
+category: 基础功能
+order: 3
+---
+
+# 用户交互系统
+
+用户交互系统是Mini-Feeds的重要组成部分，它使用户能够与内容进行互动，如点赞、收藏等。本章节将介绍用户交互系统的设计思路、核心概念和实现方式，帮助您理解如何构建一个高效的用户交互系统。
+
+## 什么是用户交互系统
+
+用户交互系统是指用户与内容之间的互动机制，包括点赞、收藏、关注等功能。这些交互不仅增强了用户体验，还为推荐系统提供了重要的反馈信号，帮助系统更好地理解用户兴趣。
+
+<Callout type="info">
+  在Mini-Feeds中，用户交互采用「主动关系中台」的设计模式，将各类用户与实体的关系统一管理，提高系统的可扩展性和一致性。
+</Callout>
+
+## 设计目标
+
+<Steps>
+
+### 统一关系模型
+
+设计一个统一的关系模型，支持各类用户与实体的关系，如用户-内容的点赞、收藏，用户-用户的关注等。统一的模型简化了系统设计，提高了可维护性。
+
+### 实时响应
+
+提供快速的交互响应，使用户能够立即看到交互结果。这通常通过前端的乐观更新和后端的异步处理来实现。
+
+### 状态同步
+
+确保用户在不同设备和会话中看到一致的交互状态。这需要可靠的状态存储和同步机制。
+
+### 数据反馈
+
+将用户交互数据反馈给推荐系统，形成闭环。这些数据是理解用户兴趣的重要信号，对提升推荐质量至关重要。
+
+</Steps>
+
+## 核心概念
+
+### 主动关系中台
+
+主动关系中台是Mini-Feeds中管理用户与实体关系的核心组件。它采用统一的数据模型来表示各类关系：
+
+```sql
+-- rel.user_entity_relations
+user_id BIGINT,        -- 用户ID
+entity_type TEXT,      -- 实体类型，如'item'、'user'
+entity_id BIGINT,      -- 实体ID
+relation_type TEXT,    -- 关系类型，如'like'、'favorite'、'follow'
+status TEXT,           -- 状态，'active'或'inactive'
+strength REAL,         -- 关系强度（可选）
+score REAL,            -- 关系分数（可选）
+last_interact_at TIMESTAMPTZ, -- 最后交互时间
+expire_at TIMESTAMPTZ, -- 过期时间（可选）
+attrs JSONB            -- 附加属性
+```
+
+这种设计有以下优势：
+
+1. **统一接口**：所有关系操作通过同一套接口完成
+2. **扩展性强**：可以轻松添加新的实体类型和关系类型
+3. **一致性好**：所有关系遵循相同的生命周期管理
+4. **查询高效**：可以高效地查询特定用户的所有关系
+
+### 乐观更新
+
+乐观更新是一种前端交互优化技术，它假设交互操作会成功，并立即更新UI状态，而不等待服务器响应。这种方式可以显著提升用户体验，特别是在网络延迟较高的情况下。
+
+乐观更新的基本流程：
+
+1. 用户触发交互操作（如点赞）
+2. 前端立即更新UI状态（如点赞按钮变为已点赞状态）
+3. 同时发送请求到服务器
+4. 如果请求成功，保持更新后的状态
+5. 如果请求失败，回滚到原始状态并显示错误提示
+
+<Card>
+  <CardHeader>
+    <CardTitle>乐观更新的挑战</CardTitle>
+  </CardHeader>
+  <CardContent>
+    <p>乐观更新虽然提升了用户体验，但也带来了一些挑战：</p>
+    <ul className="list-disc pl-5 space-y-2">
+      <li><strong>状态管理复杂</strong>：需要管理临时状态和回滚逻辑</li>
+      <li><strong>并发操作</strong>：用户可能在短时间内多次点击，需要处理并发请求</li>
+      <li><strong>网络错误</strong>：需要优雅地处理网络错误和重试逻辑</li>
+      <li><strong>状态同步</strong>：多设备间的状态同步可能存在延迟</li>
+    </ul>
+  </CardContent>
+</Card>
+
+### 幂等操作
+
+幂等操作是指多次执行同一操作产生的结果与执行一次相同的操作。在用户交互系统中，幂等性非常重要，它确保了在网络不稳定或用户多次点击的情况下，系统状态的一致性。
+
+在Mini-Feeds中，我们通过以下方式实现幂等操作：
+
+1. **唯一键约束**：在数据库层面使用唯一键约束，确保同一关系只有一条活跃记录
+2. **Idempotency-Key**：在API请求中使用幂等键，服务器可以识别重复请求
+3. **状态转换**：明确定义状态转换规则，如active→inactive→active
+
+## 技术实现
+
+### 数据模型
+
+用户交互系统的核心是主动关系表，它存储了所有用户与实体之间的关系：
+
+```sql
+CREATE TABLE rel.user_entity_relations (
+  user_id BIGINT NOT NULL,
+  entity_type TEXT NOT NULL,
+  entity_id BIGINT NOT NULL,
+  relation_type TEXT NOT NULL,
+  status TEXT CHECK (status IN ('active', 'inactive')) NOT NULL,
+  strength REAL,
+  score REAL,
+  last_interact_at TIMESTAMPTZ DEFAULT now(),
+  expire_at TIMESTAMPTZ,
+  attrs JSONB DEFAULT '{}',
+  CONSTRAINT user_entity_relation_unique 
+    UNIQUE (user_id, entity_type, entity_id, relation_type) 
+    WHERE status = 'active'
+);
+```
+
+这个表的设计支持各种类型的用户交互，并通过唯一键约束确保了关系的一致性。
+
+### API设计
+
+用户交互系统的API设计应该简单明了，支持关系的创建、更新和查询：
+
+1. **关系更新**：
+   ```http
+   POST /api/v1/relations/upsert
+   ```
+   请求体：
+   ```json
+   {
+     "user_id": 123,
+     "entity_type": "item",
+     "entity_id": 456,
+     "relation_type": "like",
+     "status": "active"
+   }
+   ```
+
+2. **关系查询**：
+   ```http
+   GET /api/v1/relations?user_id=123&entity_type=item&relation_type=like
+   ```
+   响应：
+   ```json
+   {
+     "code": 0,
+     "data": [
+       {
+         "user_id": 123,
+         "entity_type": "item",
+         "entity_id": 456,
+         "relation_type": "like",
+         "status": "active",
+         "last_interact_at": "2023-04-04T10:30:00Z"
+       }
+     ],
+     "msg": ""
+   }
+   ```
+
+### 前端实现
+
+前端实现用户交互系统的关键是提供直观的交互组件和高效的状态管理：
+
+1. **交互组件**：如LikeButton、FavButton等，提供视觉反馈和交互逻辑
+2. **状态管理**：使用React Query等工具管理远程状态和本地状态
+3. **乐观更新**：实现乐观更新逻辑，提升用户体验
+4. **错误处理**：优雅地处理网络错误和回滚逻辑
+
+以点赞按钮为例，一个简化的实现可能如下：
+
+```tsx
+function LikeButton({ itemId, initialLiked }) {
+  const [liked, setLiked] = useState(initialLiked);
+  const [isUpdating, setIsUpdating] = useState(false);
+  
+  const handleLike = async () => {
+    // 乐观更新
+    const previousState = liked;
+    setLiked(!liked);
+    setIsUpdating(true);
+    
+    try {
+      // 发送请求
+      await updateRelation({
+        entity_type: "item",
+        entity_id: itemId,
+        relation_type: "like",
+        status: !liked ? "active" : "inactive"
+      });
+    } catch (error) {
+      // 请求失败，回滚状态
+      setLiked(previousState);
+      toast({
+        title: "操作失败",
+        description: "请稍后重试",
+        variant: "destructive"
+      });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+  
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      onClick={handleLike}
+      disabled={isUpdating}
+    >
+      {liked ? (
+        <HeartFilledIcon className="mr-1 h-4 w-4 text-red-500" />
+      ) : (
+        <HeartIcon className="mr-1 h-4 w-4" />
+      )}
+      {liked ? "已点赞" : "点赞"}
+    </Button>
+  );
+}
+```
+
+## 数据反馈与闭环
+
+用户交互数据是理解用户兴趣的重要信号，应该反馈给推荐系统，形成闭环：
+
+1. **特征提取**：从用户交互数据中提取特征，如用户的点赞历史、收藏偏好等
+2. **兴趣建模**：基于交互数据构建用户兴趣模型，如标签偏好、内容偏好等
+3. **负反馈处理**：处理用户的负反馈，如拉黑、不感兴趣等，避免推荐类似内容
+4. **冷启动优化**：利用用户的初始交互数据，快速构建用户画像，解决冷启动问题
+
+<Callout type="info">
+  用户交互数据的反馈周期对推荐质量有重要影响。Mini-Feeds采用实时反馈机制，确保用户的最新交互能够及时影响推荐结果。
+</Callout>
+
+## 性能与扩展性
+
+随着用户和内容数量的增长，用户交互系统的性能和扩展性变得尤为重要：
+
+1. **索引优化**：为常用查询路径创建合适的索引，如(user_id, entity_type, relation_type)
+2. **缓存策略**：缓存热门用户的交互状态，减少数据库查询
+3. **分区策略**：根据用户ID或时间对关系表进行分区，提高查询性能
+4. **批量操作**：支持批量查询和更新，减少网络往返
+
+## 小结
+
+用户交互系统是Mini-Feeds的重要组成部分，它通过统一的关系模型、乐观更新和幂等操作，为用户提供了流畅的交互体验，同时为推荐系统提供了重要的反馈信号。在设计用户交互系统时，需要平衡用户体验、系统性能和数据一致性，构建一个高效、可靠的交互平台。
+
+在下一章中，我们将介绍[用户埋点](/docs/2-basic-features/event-tracking)系统，探讨如何收集和分析用户行为数据，为产品决策和算法优化提供支持。

@@ -1,0 +1,158 @@
+---
+title: 架构原则
+description: Mini-Feeds 项目架构设计原则
+date: 2023-04-02
+published: true
+category: 基础架构
+order: 2
+---
+
+在构建Mini-Feeds应用时，我们遵循一系列核心原则，确保系统既能满足功能需求，又具备良好的可维护性和可扩展性。本章将详细介绍这些指导原则，帮助您理解我们的设计决策。
+
+## 核心原则
+
+<Steps>
+
+### 最小复杂度
+
+**原则**：优先使用简单、成熟技术方案，避免过早引入复杂组件。
+
+**实践方式**：
+- 单一数据库策略：使用PostgreSQL承担多种角色，而非引入专用系统
+- 避免过早引入重型中间件（如Kafka、Elasticsearch、Airflow等）
+- 优先通过缓存、物化视图、索引等方式解决性能问题
+
+<Callout type="info">
+  "一库走天下"：统一使用PostgreSQL承担业务库、轻量数仓、全文检索和向量检索功能，减少系统复杂性。
+</Callout>
+
+### 闭环优先
+
+**原则**：先确保基本功能闭环，再逐步增强。
+
+**实践方式**：
+- 分阶段交付，每个阶段都是可用的完整产品
+- 先实现核心流程，再添加高级特性
+- 保证每个功能模块都有完整的前后端实现
+
+### 复用优先
+
+**原则**：尽量复用现有组件和库，减少自研。
+
+**实践方式**：
+- 前端使用成熟的组件库（shadcn/ui）
+- 后端利用PostgreSQL的扩展而非自建服务
+- 使用开源机器学习库而非从零实现算法
+
+### 可测试性
+
+**原则**：代码设计应便于单元测试和集成测试。
+
+**实践方式**：
+- 后端路由与业务逻辑分离
+- 前端组件保持纯函数特性
+- 依赖注入设计便于模拟测试
+
+### 性能优先
+
+**原则**：关注P50延迟，优先通过缓存、索引等方式优化性能。
+
+**实践方式**：
+- 合理设计索引策略
+- 使用Redis缓存热点数据
+- 采用物化视图预计算复杂查询
+- 批处理优化网络请求
+
+</Steps>
+
+## 架构约束
+
+<Card>
+  <CardHeader>
+    <CardTitle>硬性边界</CardTitle>
+  </CardHeader>
+  <CardContent>
+    <ul className="list-disc pl-5 space-y-2">
+      <li><strong>一库走天下</strong>：统一使用PostgreSQL 15+（扩展：pgvector, pg_trgm, uuid-ossp）</li>
+      <li><strong>一层服务</strong>：后端FastAPI，前端Next.js；能内存推理就不独立服务</li>
+      <li><strong>一键起停</strong>：docker-compose管理所有基础设施</li>
+      <li><strong>强一致契约</strong>：所有接口返回 `{ code, data, msg }`；写操作支持Idempotency-Key</li>
+      <li><strong>禁止过早上重件</strong>：禁止引入Airflow/Dagster/ES/Faiss/Feast/Kafka/K8s（教学阶段）</li>
+    </ul>
+  </CardContent>
+</Card>
+
+## 代码风格约束
+
+### 后端
+
+- 统一返回 `{code,data,msg}`；错误统一异常中间件转换
+- Router瘦身：业务在services/*；SQL在db/*；不在Router内写裸SQL
+- 类型齐全：SQLAlchemy Typed，Pydantic v2模型；函数签名不返回Any
+- Alembic：任何表/索引/视图变更都必须有迁移
+- 日志：每个请求生成request_id；记录耗时与关键字段
+
+### 前端
+
+- TS严格模式；UI组件无状态，数据逻辑在hooks（TanStack Query）
+- API封装在/lib/api.ts；错误状态统一提示/兜底
+- 组件命名语义化，Tailwind不写魔法数字（spacing使用设计令牌）
+- 提交规范：feat: .../fix:/chore:/docs:/test:；PR说明"影响面/回滚方式"
+
+## 违例处理
+
+如需引入重件（ES/Faiss/Feast/Airflow/Kafka/K8s等），必须先提交ADR（Architecture Decision Record），阐明：
+
+- 背景
+- 问题
+- 选项对比
+- 决策与影响面
+- 回滚方案
+
+<Callout type="warning" icon="⚠️">
+  未经批准不得合并违反架构约束的代码。这确保了系统的一致性和可维护性。
+</Callout>
+
+## 开发理念
+
+<div className="grid grid-cols-1 md:grid-cols-2 gap-6 my-8">
+  <Card>
+    <CardHeader>
+      <CardTitle>能跑就是生产力</CardTitle>
+    </CardHeader>
+    <CardContent>
+      先给Demo可见的结果，再打磨内部优雅。
+    </CardContent>
+  </Card>
+  
+  <Card>
+    <CardHeader>
+      <CardTitle>尽量复用</CardTitle>
+    </CardHeader>
+    <CardContent>
+      库/索引/视图/Hook写一次处处用。
+    </CardContent>
+  </Card>
+
+  <Card>
+    <CardHeader>
+      <CardTitle>留钩子</CardTitle>
+    </CardHeader>
+    <CardContent>
+      每个模块都预留"升级点"，但现在不实现（例如pCVR、粗排、K8s）。
+    </CardContent>
+  </Card>
+  
+  <Card>
+    <CardHeader>
+      <CardTitle>写完即测</CardTitle>
+    </CardHeader>
+    <CardContent>
+      每交付一个接口，配1–2个最小单测，手点一次端到端。
+    </CardContent>
+  </Card>
+</div>
+
+## 下一步
+
+了解了架构原则后，我们将深入探讨具体的技术实现。在下一章中，我们将详细介绍[前端架构](/docs/1-architecture/frontend-architecture)，包括技术栈选择、组件设计和状态管理策略。

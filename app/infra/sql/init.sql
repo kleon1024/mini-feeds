@@ -39,11 +39,11 @@ CREATE TABLE IF NOT EXISTS app.items (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 事件表（埋点数据）
+-- 事件表（埋点数据）- 移除外键约束以便批量导入和生成测试数据
 CREATE TABLE IF NOT EXISTS app.events (
     id BIGSERIAL PRIMARY KEY,
-    user_id BIGINT REFERENCES app.users(id),
-    item_id BIGINT REFERENCES app.items(id),
+    user_id BIGINT,
+    item_id BIGINT,
     event_type TEXT NOT NULL,
     ts TIMESTAMPTZ DEFAULT NOW(),
     source TEXT,

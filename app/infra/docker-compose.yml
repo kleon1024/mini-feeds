@@ -17,6 +17,8 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./sql/init.sql:/docker-entrypoint-initdb.d/01-init.sql
       - ./sql/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql
+      - ./sql/metrics_views.sql:/docker-entrypoint-initdb.d/03-metrics_views.sql
+      - ./sql/metrics_seed.sql:/docker-entrypoint-initdb.d/04-metrics_seed.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -74,6 +76,21 @@ services:
       - sqlpad_data:/var/lib/sqlpad
     depends_on:
       - postgres
+    restart: unless-stopped
+
+  # 定时任务容器
+  cron:
+    image: alpine:latest
+    container_name: mini-feeds-cron
+    depends_on:
+      - postgres
+    volumes:
+      - ./scripts:/scripts
+    command: >
+      sh -c "apk add --no-cache postgresql-client bash && 
+             chmod +x /scripts/refresh_materialized_views.sh && 
+             echo '*/5 * * * * /scripts/refresh_materialized_views.sh >> /scripts/refresh.log 2>&1' > /etc/crontabs/root && 
+             crond -f -d 8"
     restart: unless-stopped
 
 volumes:

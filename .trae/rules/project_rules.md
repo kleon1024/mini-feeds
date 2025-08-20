@@ -5,6 +5,22 @@
 前端总是使用localhost:3000，如果端口已经占用，不要启动其他端口，前端使用cd app/frontend && npm run dev
 后端总是使用localhost:8000，如果端口已经占用，不要启动其他端口，后端使用cd app/backend && ./start_dev.sh
 
+后端服务和前端服务如果已经启动，修改文件会自动触发build，不需要重启服务，不需要重启服务，不需要重启服务！！！
+
+如果遇到表数据错误，请修复app/infra/sql下相关的初始化脚本，确保docker compose清理后重新拉起postgres后，数据正常
+
+请你调试postgres时不要让我输密码，不要让我输密码，不要让我输密码！！！
+更简单的方法是使用环境变量或命令行参数直接指定密码，比如：
+
+直接把密码带进容器的 psql：
+
+docker exec -e PGPASSWORD=postgres -it mini-feeds-postgres \
+  psql -h 127.0.0.1 -U postgres -d mini_feeds \
+  -c "SELECT schemaname, matviewname FROM pg_matviews WHERE schemaname = 'metrics';"
+
+关键点：加了 -e PGPASSWORD=...，并且指定 -h 127.0.0.1 走 TCP，避免 Unix socket 的匹配问题。
+```
+
 postgres请使用asyncpg
 
 0. 硬性边界 & 价值观

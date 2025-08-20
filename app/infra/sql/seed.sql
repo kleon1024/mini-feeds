@@ -8,6 +8,20 @@ INSERT INTO app.users (username, tags) VALUES
 ('admin', '{"interests": ["tech", "business"], "age_group": "25-34", "role": "admin"}'::jsonb)
 ON CONFLICT DO NOTHING;
 
+-- 批量生成更多用户数据
+INSERT INTO app.users (username, tags)
+SELECT 
+    'batch_user_' || i,
+    jsonb_build_object(
+        'interests', ARRAY[
+            ARRAY['tech', 'sports', 'news', 'gaming'][(i % 4) + 1],
+            ARRAY['fashion', 'travel', 'food', 'music'][(i % 4) + 1]
+        ],
+        'age_group', ARRAY['18-24', '25-34', '35-44', '45+'][(i % 4) + 1]
+    )
+FROM generate_series(1, 100) i
+ON CONFLICT DO NOTHING;
+
 -- 创建测试内容
 INSERT INTO app.items (title, content, tags, author_id, media, kind) VALUES
 ('技术分享：Python的未来发展', '这篇文章讨论了Python在未来几年的发展趋势。Python作为一种通用编程语言，近年来在数据科学、人工智能和Web开发领域获得了广泛应用。未来几年，Python将继续在这些领域保持强势地位，同时在物联网和嵌入式系统方面也将有更多的应用。Python的简洁语法和丰富的库生态系统使其成为初学者和专业开发者的首选语言。', '{"topics": ["tech", "programming", "python"], "category": "article"}'::jsonb, 1, '{"type": "image", "url": "https://example.com/images/python.jpg"}'::jsonb, 'content'),
@@ -23,6 +37,43 @@ INSERT INTO app.items (title, content, tags, author_id, media, kind) VALUES
 ('日本美食之旅：东京必吃餐厅', '作为美食爱好者的天堂，东京拥有世界上最多的米其林星级餐厅。本文带你探索东京的美食文化，从传统的寿司和拉面，到创新的融合料理。文章详细介绍了十家必访的餐厅，包括它们的特色菜品、用餐环境和预订信息。无论你是追求正宗的日本传统美食，还是喜欢尝试现代创新料理，这份指南都能满足你的需求。此外，文章还提供了一些用餐礼仪和小贴士，帮助你更好地享受东京的美食之旅。', '{"topics": ["food", "travel", "japan"], "category": "guide"}'::jsonb, 3, '{"type": "gallery", "urls": ["https://example.com/images/tokyo_food1.jpg", "https://example.com/images/tokyo_food2.jpg"]}'::jsonb, 'content'),
 ('智能家居设备推荐', '随着智能家居技术的发展，越来越多的设备可以帮助我们简化日常生活。本文推荐了十款最实用的智能家居设备，从智能音箱到安全摄像头，从智能灯泡到智能恒温器。每款设备都经过了实际测试，文章详细分析了它们的功能、易用性、兼容性和性价比。此外，文章还讨论了如何将这些设备整合到一个统一的智能家居系统中，以及如何保护你的智能家居网络安全。', '{"topics": ["tech", "smart_home", "gadgets"], "category": "review"}'::jsonb, 1, '{"type": "gallery", "urls": ["https://example.com/images/smart_home1.jpg", "https://example.com/images/smart_home2.jpg"]}'::jsonb, 'content')
 ON CONFLICT DO NOTHING;
+
+-- 批量生成更多内容数据
+INSERT INTO app.items (title, content, tags, author_id, media, kind)
+SELECT
+    CASE
+        WHEN i % 3 = 0 THEN '技术文章: ' || i
+        WHEN i % 3 = 1 THEN '旅行日记: ' || i
+        ELSE '生活分享: ' || i
+    END,
+    CASE
+        WHEN i % 3 = 0 THEN '这是一篇关于技术的文章，讨论了最新的技术趋势和发展方向。'
+        WHEN i % 3 = 1 THEN '这是一篇旅行日记，记录了在不同地方的旅行经历和感受。'
+        ELSE '这是一篇生活分享，分享了日常生活中的小确幸和感悟。'
+    END,
+    CASE
+        WHEN i % 3 = 0 THEN '{"topics": ["tech", "programming"], "category": "article"}'::jsonb
+        WHEN i % 3 = 1 THEN '{"topics": ["travel", "adventure"], "category": "blog"}'::jsonb
+        ELSE '{"topics": ["lifestyle", "daily"], "category": "blog"}'::jsonb
+    END,
+    (i % 3) + 1,
+    CASE
+        WHEN i % 3 = 0 THEN '{"type": "image", "url": "https://example.com/images/tech_' || i || '.jpg"}'::jsonb
+        WHEN i % 3 = 1 THEN '{"type": "gallery", "urls": ["https://example.com/images/travel_' || i || '_1.jpg", "https://example.com/images/travel_' || i || '_2.jpg"]}'::jsonb
+        ELSE '{"type": "image", "url": "https://example.com/images/lifestyle_' || i || '.jpg"}'::jsonb
+    END,
+    CASE
+        WHEN i % 10 = 0 THEN 'ad'
+        WHEN i % 5 = 0 THEN 'product'
+        ELSE 'content'
+    END
+FROM generate_series(13, 100) i
+ON CONFLICT DO NOTHING;
+
+-- 为product类型的内容添加价格
+UPDATE app.items
+SET media = jsonb_set(media, '{price}', to_jsonb((random() * 1000 + 50)::numeric(12,2)))
+WHERE kind = 'product' AND (media->>'price') IS NULL;
 
 -- 创建测试事件数据
 INSERT INTO app.events (user_id, item_id, event_type, source, staytime_ms, extra) VALUES
@@ -43,6 +94,133 @@ INSERT INTO app.events (user_id, item_id, event_type, source, staytime_ms, extra
 (2, 8, 'ad_click', 'feed', 0, '{"position": 3, "session_id": "def456", "creative_id": 1}'::jsonb),
 (3, 8, 'impression', 'feed', 1000, '{"position": 2, "session_id": "ghi789", "creative_id": 1}'::jsonb)
 ON CONFLICT DO NOTHING;
+
+-- 批量生成更多事件数据
+-- 生成过去180天的事件数据，模拟波动增长趋势
+
+-- 生成180-120天前的基础数据（较少）
+INSERT INTO app.events (user_id, item_id, event_type, ts, source, staytime_ms, gmv_amount, extra)
+SELECT
+  (random() * 99 + 1)::int,
+  (random() * 11 + 1)::int,
+  CASE
+    WHEN random() < 0.5 THEN 'impression'
+    WHEN random() < 0.7 THEN 'click'
+    WHEN random() < 0.8 THEN 'staytime'
+    WHEN random() < 0.9 THEN 'like'
+    ELSE 'favorite'
+  END,
+  NOW() - (random() * 60 + 120)::int * INTERVAL '1 day' - (random() * 24)::int * INTERVAL '1 hour',
+  CASE
+    WHEN random() < 0.7 THEN 'feed'
+    WHEN random() < 0.9 THEN 'search'
+    ELSE 'recommendation'
+  END,
+  CASE
+    WHEN random() < 0.8 THEN (random() * 60000)::int
+    ELSE 0
+  END,
+  CASE
+    -- 为商品点击添加GMV金额
+    WHEN random() < 0.3 THEN (random() * 500 + 100)::numeric(12,2)
+    ELSE 0
+  END,
+  jsonb_build_object(
+    'position', (random() * 20 + 1)::int,
+    'trace_id', 'trace_' || (random() * 1000000)::int,
+    -- 为广告点击添加CPC金额
+    'cpc_amount', CASE 
+      WHEN random() < 0.2 THEN (random() * 1.5 + 0.1)::numeric(12,2)::text
+      ELSE NULL
+    END
+  )
+FROM generate_series(1, 1000) i
+ON CONFLICT DO NOTHING;
+
+-- 生成120-60天前的基础数据（中等）
+INSERT INTO app.events (user_id, item_id, event_type, ts, source, staytime_ms, gmv_amount, extra)
+SELECT
+  (random() * 99 + 1)::int,
+  (random() * 11 + 1)::int,
+  CASE
+    WHEN random() < 0.5 THEN 'impression'
+    WHEN random() < 0.7 THEN 'click'
+    WHEN random() < 0.8 THEN 'staytime'
+    WHEN random() < 0.9 THEN 'like'
+    ELSE 'favorite'
+  END,
+  NOW() - (random() * 60 + 60)::int * INTERVAL '1 day' - (random() * 24)::int * INTERVAL '1 hour',
+  CASE
+    WHEN random() < 0.7 THEN 'feed'
+    WHEN random() < 0.9 THEN 'search'
+    ELSE 'recommendation'
+  END,
+  CASE
+    WHEN random() < 0.8 THEN (random() * 60000)::int
+    ELSE 0
+  END,
+  CASE
+    -- 为商品点击添加GMV金额
+    WHEN random() < 0.4 THEN (random() * 700 + 200)::numeric(12,2)
+    ELSE 0
+  END,
+  jsonb_build_object(
+    'position', (random() * 20 + 1)::int,
+    'trace_id', 'trace_' || (random() * 1000000)::int,
+    -- 为广告点击添加CPC金额
+    'cpc_amount', CASE 
+      WHEN random() < 0.3 THEN (random() * 1.8 + 0.2)::numeric(12,2)::text
+      ELSE NULL
+    END
+  )
+FROM generate_series(1, 2000) i
+ON CONFLICT DO NOTHING;
+
+-- 生成60-0天前的基础数据（较多）
+INSERT INTO app.events (user_id, item_id, event_type, ts, source, staytime_ms, gmv_amount, extra)
+SELECT
+  (random() * 99 + 1)::int,
+  (random() * 11 + 1)::int,
+  CASE
+    WHEN random() < 0.5 THEN 'impression'
+    WHEN random() < 0.7 THEN 'click'
+    WHEN random() < 0.8 THEN 'staytime'
+    WHEN random() < 0.9 THEN 'like'
+    ELSE 'favorite'
+  END,
+  NOW() - (random() * 60)::int * INTERVAL '1 day' - (random() * 24)::int * INTERVAL '1 hour',
+  CASE
+    WHEN random() < 0.7 THEN 'feed'
+    WHEN random() < 0.9 THEN 'search'
+    ELSE 'recommendation'
+  END,
+  CASE
+    WHEN random() < 0.8 THEN (random() * 60000)::int
+    ELSE 0
+  END,
+  CASE
+    -- 为商品点击添加GMV金额
+    WHEN random() < 0.5 THEN (random() * 1000 + 300)::numeric(12,2)
+    ELSE 0
+  END,
+  jsonb_build_object(
+    'position', (random() * 20 + 1)::int,
+    'trace_id', 'trace_' || (random() * 1000000)::int,
+    -- 为广告点击添加CPC金额
+    'cpc_amount', CASE 
+      WHEN random() < 0.4 THEN (random() * 2 + 0.3)::numeric(12,2)::text
+      ELSE NULL
+    END
+  )
+FROM generate_series(1, 3000) i
+ON CONFLICT DO NOTHING;
+
+-- 确保商品点击事件有GMV金额
+UPDATE app.events
+SET gmv_amount = CASE WHEN random() < 0.8 THEN (random() * 1000 + 200)::numeric(12,2) ELSE 500 END
+WHERE event_type = 'click'
+AND item_id IN (SELECT id FROM app.items WHERE kind = 'product')
+AND (gmv_amount IS NULL OR gmv_amount = 0);
 
 -- 创建用户关系数据
 INSERT INTO rel.user_entity_relations (user_id, entity_type, entity_id, relation_type, status) VALUES
@@ -79,7 +257,20 @@ INSERT INTO ads.daily_budget (campaign_id, day, budget) VALUES
 (2, CURRENT_DATE, 200.00)
 ON CONFLICT DO NOTHING;
 
--- 刷新物化视图
+-- 刷新所有物化视图
 REFRESH MATERIALIZED VIEW search.item_ft;
-REFRESH MATERIALIZED VIEW metrics.daily_ctr;
-REFRESH MATERIALIZED VIEW metrics.ad_performance;
+REFRESH MATERIALIZED VIEW CONCURRENTLY metrics.daily_active_users;
+REFRESH MATERIALIZED VIEW CONCURRENTLY metrics.weekly_active_users;
+REFRESH MATERIALIZED VIEW CONCURRENTLY metrics.monthly_active_users;
+REFRESH MATERIALIZED VIEW CONCURRENTLY metrics.content_type_ctr;
+REFRESH MATERIALIZED VIEW CONCURRENTLY metrics.user_staytime;
+REFRESH MATERIALIZED VIEW CONCURRENTLY metrics.user_interaction_rate;
+REFRESH MATERIALIZED VIEW CONCURRENTLY metrics.content_distribution;
+REFRESH MATERIALIZED VIEW CONCURRENTLY metrics.ad_revenue;
+REFRESH MATERIALIZED VIEW CONCURRENTLY metrics.product_revenue;
+REFRESH MATERIALIZED VIEW CONCURRENTLY metrics.user_retention;
+REFRESH MATERIALIZED VIEW CONCURRENTLY metrics.daily_ctr;
+REFRESH MATERIALIZED VIEW CONCURRENTLY metrics.ad_performance;
+
+-- 执行刷新函数
+SELECT metrics.refresh_all_materialized_views();

@@ -1,0 +1,308 @@
+---
+title: 用户埋点
+description: 统一的事件追踪系统
+date: 2023-04-05
+published: true
+category: 基础功能
+order: 4
+---
+
+# 用户埋点
+
+用户埋点是Mini-Feeds系统中收集和分析用户行为数据的关键组件。本章节将介绍用户埋点的基本概念、设计思路和实现方式，帮助您理解如何构建一个高效的事件追踪系统。
+
+## 什么是用户埋点
+
+用户埋点是指在应用中的关键节点记录用户行为数据的过程。这些数据包括用户的浏览、点击、停留时间等行为，是理解用户使用习惯、优化产品体验和提升算法效果的重要依据。
+
+<Callout type="info">
+  Mini-Feeds采用统一埋点模型，将所有类型的事件（如曝光、点击、停留时间）存储在同一张表中，简化了数据收集和分析流程。
+</Callout>
+
+## 设计目标
+
+<Steps>
+
+### 数据完整性
+
+收集全面、准确的用户行为数据，确保数据的完整性和一致性。这是进行有效分析和优化的基础。
+
+### 实时性
+
+支持实时数据收集和处理，使系统能够快速响应用户行为变化，提供及时的反馈和优化。
+
+### 可扩展性
+
+设计可扩展的埋点系统，能够轻松添加新的事件类型和属性，适应业务的发展和变化。
+
+### 低侵入性
+
+埋点实现应该对业务逻辑的侵入性最小，避免埋点代码与业务逻辑过度耦合。
+
+</Steps>
+
+## 核心概念
+
+### 统一事件模型
+
+Mini-Feeds采用统一的事件模型来表示各类用户行为：
+
+```sql
+-- app.events
+id BIGSERIAL PK,           -- 事件ID
+user_id BIGINT,            -- 用户ID
+item_id BIGINT,            -- 内容ID
+event_type TEXT,           -- 事件类型
+ts TIMESTAMPTZ,            -- 事件时间
+source TEXT,               -- 事件来源
+staytime_ms INT,           -- 停留时间（毫秒）
+gmv_amount NUMERIC(12,2),   -- 交易金额（如适用）
+extra JSONB                -- 附加属性
+```
+
+这种统一的事件模型有以下优势：
+
+1. **简化数据收集**：所有事件通过同一接口收集
+2. **便于分析**：可以在同一数据源上进行各类分析
+3. **灵活扩展**：通过extra字段支持各类特定事件的附加属性
+4. **一致性强**：所有事件遵循相同的数据结构和处理流程
+
+### 事件类型
+
+Mini-Feeds支持多种事件类型，主要包括：
+
+1. **曝光（impression）**：内容被用户看到
+2. **点击（click）**：用户点击内容
+3. **停留（staytime）**：用户在内容上的停留时间
+4. **交互（interaction）**：用户与内容的交互，如点赞、收藏
+5. **转化（conversion）**：用户完成特定目标，如购买、注册
+
+<Card>
+  <CardHeader>
+    <CardTitle>曝光定义</CardTitle>
+  </CardHeader>
+  <CardContent>
+    <p>在Mini-Feeds中，曝光的定义为：</p>
+    <ul className="list-disc pl-5 space-y-2">
+      <li><strong>有效曝光</strong>：内容在视口中可见且停留时间≥800ms</li>
+      <li><strong>曝光去重</strong>：同一内容在同一会话中只记录一次曝光</li>
+      <li><strong>曝光位置</strong>：记录内容在列表中的位置，用于分析位置效应</li>
+      <li><strong>曝光追踪</strong>：每次曝光生成唯一的trace_id，用于关联后续事件</li>
+    </ul>
+  </CardContent>
+</Card>
+
+### 埋点策略
+
+有效的埋点策略需要平衡数据价值和系统负担，Mini-Feeds采用以下埋点策略：
+
+1. **必要埋点**：核心行为必须埋点，如曝光、点击、关键转化
+2. **采样埋点**：高频行为可以采样埋点，如滚动、鼠标移动
+3. **条件埋点**：特定条件下才触发的埋点，如长时间停留、异常行为
+4. **批量上报**：将多个事件批量上报，减少网络请求
+
+## 技术实现
+
+### 数据收集
+
+前端埋点实现的关键是准确捕获用户行为并高效上报：
+
+1. **曝光检测**：使用IntersectionObserver API检测元素可见性
+2. **停留时间**：记录元素进入和离开视口的时间差
+3. **事件防抖**：对高频事件进行防抖处理，避免过多上报
+4. **批量上报**：将事件缓存在内存中，批量上报或在页面离开时上报
+
+以曝光检测为例，一个简化的实现可能如下：
+
+```tsx
+function ActiveExposure({ item }) {
+  const [isExposed, setIsExposed] = useState(false);
+  const [exposureStartTime, setExposureStartTime] = useState(null);
+  const ref = useRef(null);
+  
+  useEffect(() => {
+    // 重置状态
+    setIsExposed(false);
+    setExposureStartTime(null);
+    
+    // 创建观察器
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            // 元素进入视口
+            setExposureStartTime(Date.now());
+            // 800ms后检查是否仍在视口中
+            setTimeout(() => {
+              if (exposureStartTime && !isExposed) {
+                setIsExposed(true);
+                // 上报曝光事件
+                trackEvent({
+                  event_type: "impression",
+                  item_id: item.id,
+                  position: item.position,
+                  trace_id: item.tracking.trace_id
+                });
+              }
+            }, 800);
+          } else {
+            // 元素离开视口
+            if (exposureStartTime) {
+              const staytime = Date.now() - exposureStartTime;
+              if (staytime >= 200) {
+                // 上报停留事件
+                trackEvent({
+                  event_type: "staytime",
+                  item_id: item.id,
+                  staytime_ms: staytime,
+                  trace_id: item.tracking.trace_id
+                });
+              }
+              setExposureStartTime(null);
+            }
+          }
+        });
+      },
+      { threshold: 0.5 } // 元素50%可见时触发
+    );
+    
+    if (ref.current) {
+      observer.observe(ref.current);
+    }
+    
+    return () => {
+      observer.disconnect();
+    };
+  }, [item]);
+  
+  return <div ref={ref}>{/* 内容 */}</div>;
+}
+```
+
+### 上报机制
+
+高效的上报机制是埋点系统的关键，Mini-Feeds采用以下上报策略：
+
+1. **优先使用Beacon API**：
+   ```javascript
+   navigator.sendBeacon('/api/v1/events', JSON.stringify(events));
+   ```
+   Beacon API允许在页面卸载时可靠地发送数据，不会阻塞页面卸载过程。
+
+2. **批量上报**：
+   ```javascript
+   // 事件队列
+   const eventQueue = [];
+   
+   // 添加事件
+   function trackEvent(event) {
+     eventQueue.push({
+       ...event,
+       ts: new Date().toISOString(),
+       user_id: getUserId()
+     });
+     
+     // 队列达到一定大小或一定时间后上报
+     if (eventQueue.length >= 20 || lastFlushTime + 1000 < Date.now()) {
+       flushEvents();
+     }
+   }
+   
+   // 上报事件
+   function flushEvents() {
+     if (eventQueue.length === 0) return;
+     
+     const events = [...eventQueue];
+     eventQueue.length = 0;
+     lastFlushTime = Date.now();
+     
+     // 优先使用Beacon API
+     if (navigator.sendBeacon) {
+       const success = navigator.sendBeacon(
+         '/api/v1/events',
+         JSON.stringify(events)
+       );
+       
+       if (success) return;
+     }
+     
+     // 回退到fetch
+     fetch('/api/v1/events', {
+       method: 'POST',
+       headers: { 'Content-Type': 'application/json' },
+       body: JSON.stringify(events),
+       keepalive: true
+     }).catch(console.error);
+   }
+   
+   // 页面卸载时上报
+   window.addEventListener('visibilitychange', () => {
+     if (document.visibilityState === 'hidden') {
+       flushEvents();
+     }
+   });
+   
+   window.addEventListener('pagehide', flushEvents);
+   ```
+
+3. **失败重试**：对于重要事件，实现失败重试机制，确保数据不丢失。
+
+### 数据处理
+
+埋点数据收集后，需要进行处理和分析：
+
+1. **数据清洗**：过滤无效数据，如机器人行为、异常值等
+2. **数据聚合**：按用户、内容、时间等维度聚合数据
+3. **指标计算**：计算关键指标，如CTR、停留时间、转化率等
+4. **数据可视化**：通过图表展示数据趋势和分布
+
+在Mini-Feeds中，我们使用物化视图来预计算常用指标，提高查询效率：
+
+```sql
+CREATE MATERIALIZED VIEW metrics.daily_ctr AS
+SELECT
+  DATE_TRUNC('day', e.ts) AS day,
+  i.kind,
+  COUNT(DISTINCT CASE WHEN e.event_type = 'impression' THEN e.id END) AS impressions,
+  COUNT(DISTINCT CASE WHEN e.event_type = 'click' THEN e.id END) AS clicks,
+  CASE 
+    WHEN COUNT(DISTINCT CASE WHEN e.event_type = 'impression' THEN e.id END) > 0 
+    THEN ROUND(COUNT(DISTINCT CASE WHEN e.event_type = 'click' THEN e.id END)::NUMERIC / 
+             COUNT(DISTINCT CASE WHEN e.event_type = 'impression' THEN e.id END), 4)
+    ELSE 0
+  END AS ctr
+FROM app.events e
+JOIN app.items i ON e.item_id = i.id
+WHERE e.ts >= CURRENT_DATE - INTERVAL '30 days'
+AND e.event_type IN ('impression', 'click')
+GROUP BY DATE_TRUNC('day', e.ts), i.kind
+ORDER BY day DESC, kind;
+```
+
+## 数据应用
+
+埋点数据的价值在于其应用，Mini-Feeds将埋点数据应用于以下方面：
+
+1. **用户画像**：基于用户行为构建用户画像，包括兴趣标签、活跃度等
+2. **内容评估**：评估内容质量和受欢迎程度，指导内容生产和推荐
+3. **算法优化**：为推荐算法提供训练样本和评估指标
+4. **产品优化**：分析用户行为模式，发现产品问题和优化机会
+
+<Callout type="info">
+  埋点数据是构建推荐系统的基础。在Mini-Feeds中，我们使用曝光-点击数据构建CTR预测模型，使用停留时间数据评估内容质量，使用交互数据构建用户兴趣模型。
+</Callout>
+
+## 性能与隐私
+
+埋点系统的设计需要平衡数据收集的全面性和系统性能：
+
+1. **性能影响**：埋点不应显著影响应用性能，特别是前端响应性
+2. **数据量控制**：合理控制埋点数据量，避免存储和处理压力
+3. **隐私保护**：遵循隐私法规，如GDPR、CCPA等，只收集必要数据
+4. **数据安全**：保护埋点数据的安全，防止数据泄露和滥用
+
+## 小结
+
+用户埋点是Mini-Feeds系统的重要组成部分，它通过统一的事件模型和高效的上报机制，收集和分析用户行为数据，为产品优化和算法改进提供数据支持。在设计埋点系统时，需要平衡数据价值、系统性能和用户隐私，构建一个高效、可靠的事件追踪系统。
+
+在下一章中，我们将介绍[基础指标看板](/docs/2-basic-features/metrics-dashboard)，探讨如何基于埋点数据构建业务指标监控系统，为产品决策提供数据支持。

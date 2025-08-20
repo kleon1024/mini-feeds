@@ -1,0 +1,433 @@
+---
+title: 基础指标看板
+description: 构建核心业务指标监控系统
+date: 2023-04-06
+published: true
+category: 基础功能
+order: 5
+---
+
+# 基础指标看板
+
+基础指标看板是Mini-Feeds系统中监控和分析业务指标的重要工具。本章节将介绍指标看板的设计思路、核心指标和实现方式，帮助您理解如何构建一个高效的业务监控系统。
+
+## 什么是指标看板
+
+指标看板是一种可视化工具，用于展示和监控关键业务指标的变化趋势。它将复杂的数据转化为直观的图表和数值，帮助团队快速了解产品状态，发现问题和机会，做出数据驱动的决策。
+
+<Callout type="info">
+  Mini-Feeds的指标看板基于物化视图构建，通过预计算常用指标，提高查询效率，同时保持数据的相对实时性。指标数据通过统一的API接口提供，前端使用现代化的组件展示，支持多维度分析和交互式探索。
+</Callout>
+
+## 设计目标
+
+<Steps>
+
+### 全面监控
+
+覆盖核心业务指标，包括用户活跃度、内容分发、交互效果、广告收入和商品GMV等方面，提供全面的业务监控。
+
+### 实时性
+
+提供近实时的数据更新，使团队能够及时发现和响应业务变化，特别是对于关键指标的异常波动。
+
+### 多维分析
+
+支持多维度的数据分析，如时间维度（日/周/月）、内容类型维度、用户群体维度等，帮助深入理解业务表现。
+
+### 易用性
+
+设计直观、易用的界面，使用卡片式布局和分类标签页，使非技术人员也能轻松使用，降低数据分析的门槛。
+
+</Steps>
+
+## 核心指标
+
+### 用户指标
+
+用户指标反映了产品的用户活跃度和增长情况：
+
+1. **日活跃用户（DAU）**：每日活跃用户数量，反映产品的日常活跃度
+2. **周活跃用户（WAU）**：每周活跃用户数量，反映产品的中期活跃度
+3. **月活跃用户（MAU）**：每月活跃用户数量，反映产品的长期活跃度
+4. **新增用户**：每日新增用户数量，反映产品的增长能力
+5. **用户留存率**：次日/7日/30日留存率，反映产品的用户粘性
+6. **用户活跃度**：人均访问次数、人均停留时间，反映用户参与度
+
+<Card>
+  <CardHeader>
+    <CardTitle>用户留存率计算</CardTitle>
+  </CardHeader>
+  <CardContent>
+    <p>在Mini-Feeds中，用户留存率按以下方式计算：</p>
+    <ul className="list-disc pl-5 space-y-2">
+      <li><strong>次日留存率</strong>：当日新增用户中，次日仍活跃的用户比例</li>
+      <li><strong>7日留存率</strong>：当日新增用户中，7天后仍活跃的用户比例</li>
+      <li><strong>30日留存率</strong>：当日新增用户中，30天后仍活跃的用户比例</li>
+    </ul>
+    <p className="mt-4">留存率是评估产品价值和用户体验的关键指标，高留存率通常意味着产品满足了用户需求。</p>
+  </CardContent>
+</Card>
+
+### 内容指标
+
+内容指标反映了内容的分发效果和质量：
+
+1. **曝光量**：内容的总曝光次数，反映内容的分发广度
+2. **点击率（CTR）**：点击次数/曝光次数，反映内容的吸引力
+3. **停留时间**：用户在内容上的平均停留时间，反映内容的质量和深度
+4. **互动率**：点赞/收藏/评论等互动次数/曝光次数，反映内容的参与度
+5. **内容分布**：不同类型内容的分布比例，反映内容的多样性
+
+<Card>
+  <CardHeader>
+    <CardTitle>CTR计算方法</CardTitle>
+  </CardHeader>
+  <CardContent>
+    <p>在Mini-Feeds中，CTR的计算有多种粒度：</p>
+    <ul className="list-disc pl-5 space-y-2">
+      <li><strong>整体CTR</strong>：所有内容的点击次数/所有内容的曝光次数</li>
+      <li><strong>内容类型CTR</strong>：特定类型内容的点击次数/特定类型内容的曝光次数</li>
+      <li><strong>位置CTR</strong>：特定位置的点击次数/特定位置的曝光次数</li>
+      <li><strong>时间段CTR</strong>：特定时间段的点击次数/特定时间段的曝光次数</li>
+    </ul>
+    <p className="mt-4">CTR是评估内容吸引力和推荐效果的重要指标，但需要结合其他指标综合分析，避免优化误区。</p>
+  </CardContent>
+</Card>
+
+### 推荐指标
+
+推荐指标反映了推荐系统的效果：
+
+1. **点击率（CTR）**：推荐内容的点击率，反映推荐的精准度
+2. **覆盖率（Coverage）**：被推荐的内容占总内容的比例，反映推荐的广度
+3. **多样性（Diversity）**：推荐内容的类型、主题等多样性，反映推荐的丰富度
+4. **新颖性（Novelty）**：推荐内容中新内容的比例，反映推荐的创新度
+5. **个性化程度**：不同用户推荐内容的差异度，反映推荐的个性化水平
+
+### 广告指标
+
+广告指标反映了广告系统的效果和商业价值：
+
+1. **广告曝光量**：广告的总曝光次数，反映广告的覆盖面
+2. **广告点击率（CTR）**：广告点击次数/广告曝光次数，反映广告的吸引力
+3. **点击成本（CPC）**：广告收入/广告点击次数，反映广告的变现效率
+4. **广告收入**：广告系统产生的总收入，反映广告的商业价值
+5. **预算消耗率**：实际花费/预算，反映广告投放的效率
+6. **千次曝光收入（eCPM）**：广告收入/广告曝光量×1000，反映广告的整体变现能力
+
+### 商品指标
+
+商品指标反映了电商功能的效果和商业价值：
+
+1. **商品曝光量**：商品的总曝光次数，反映商品的分发广度
+2. **商品点击率**：商品点击次数/商品曝光次数，反映商品的吸引力
+3. **商品转化率**：商品购买次数/商品点击次数，反映商品的转化效率
+4. **商品GMV**：商品成交总金额，反映商品的商业价值
+5. **客单价**：商品GMV/商品购买次数，反映商品的价值水平
+
+### 系统指标
+
+系统指标反映了系统的性能和稳定性：
+
+1. **接口延迟**：API接口的响应时间
+2. **错误率**：API接口的错误率
+3. **资源使用率**：CPU、内存、磁盘等资源的使用率
+
+## 技术实现
+
+### 数据层
+
+Mini-Feeds的指标看板数据层基于PostgreSQL物化视图构建，预计算常用指标，提高查询效率。物化视图存储在专用的`metrics`模式下，通过定时刷新保持数据的相对实时性。
+
+以下是核心物化视图的实现示例：
+
+```sql
+-- 日活跃用户
+CREATE MATERIALIZED VIEW metrics.daily_active_users AS
+SELECT
+  DATE_TRUNC('day', ts) AS day,
+  COUNT(DISTINCT user_id) AS dau
+FROM app.events
+WHERE ts >= CURRENT_DATE - INTERVAL '30 days'
+GROUP BY DATE_TRUNC('day', ts)
+ORDER BY day DESC;
+
+-- 周活跃用户
+CREATE MATERIALIZED VIEW metrics.weekly_active_users AS
+SELECT
+  DATE_TRUNC('week', ts) AS week,
+  COUNT(DISTINCT user_id) AS wau
+FROM app.events
+WHERE ts >= CURRENT_DATE - INTERVAL '90 days'
+GROUP BY DATE_TRUNC('week', ts)
+ORDER BY week DESC;
+
+-- 广告收入指标
+CREATE MATERIALIZED VIEW metrics.ad_revenue AS
+SELECT
+  DATE_TRUNC('day', e.ts) AS day,
+  COUNT(DISTINCT CASE WHEN e.event_type = 'impression' AND i.kind = 'ad' THEN e.id END) AS ad_impressions,
+  COUNT(DISTINCT CASE WHEN e.event_type = 'click' AND i.kind = 'ad' THEN e.id END) AS ad_clicks,
+  CASE 
+    WHEN COUNT(DISTINCT CASE WHEN e.event_type = 'impression' AND i.kind = 'ad' THEN e.id END) > 0 
+    THEN ROUND(COUNT(DISTINCT CASE WHEN e.event_type = 'click' AND i.kind = 'ad' THEN e.id END)::NUMERIC / 
+             COUNT(DISTINCT CASE WHEN e.event_type = 'impression' AND i.kind = 'ad' THEN e.id END), 4)
+    ELSE 0
+  END AS ad_ctr,
+  SUM(CASE WHEN e.event_type = 'click' AND i.kind = 'ad' THEN COALESCE((e.extra->>'cpc_amount')::NUMERIC, 0.5) ELSE 0 END) AS ad_revenue
+FROM app.events e
+JOIN app.items i ON e.item_id = i.id
+WHERE e.ts >= CURRENT_DATE - INTERVAL '30 days'
+AND e.event_type IN ('impression', 'click')
+AND i.kind = 'ad'
+GROUP BY DATE_TRUNC('day', e.ts)
+ORDER BY day DESC;
+
+-- 商品收入指标
+CREATE MATERIALIZED VIEW metrics.product_revenue AS
+SELECT
+  DATE_TRUNC('day', e.ts) AS day,
+  COUNT(DISTINCT CASE WHEN e.event_type = 'impression' AND i.kind = 'product' THEN e.id END) AS product_impressions,
+  COUNT(DISTINCT CASE WHEN e.event_type = 'click' AND i.kind = 'product' THEN e.id END) AS product_clicks,
+  SUM(COALESCE(e.gmv_amount, 0)) AS gmv,
+  COUNT(DISTINCT CASE WHEN e.event_type = 'click' AND i.kind = 'product' AND e.gmv_amount > 0 THEN e.id END) AS conversions,
+  CASE 
+    WHEN COUNT(DISTINCT CASE WHEN e.event_type = 'click' AND i.kind = 'product' THEN e.id END) > 0 
+    THEN ROUND(COUNT(DISTINCT CASE WHEN e.event_type = 'click' AND i.kind = 'product' AND e.gmv_amount > 0 THEN e.id END)::NUMERIC / 
+             COUNT(DISTINCT CASE WHEN e.event_type = 'click' AND i.kind = 'product' THEN e.id END), 4)
+    ELSE 0
+  END AS conversion_rate
+FROM app.events e
+JOIN app.items i ON e.item_id = i.id
+WHERE e.ts >= CURRENT_DATE - INTERVAL '30 days'
+AND i.kind = 'product'
+GROUP BY DATE_TRUNC('day', e.ts)
+ORDER BY day DESC;
+```
+
+为了保持数据的实时性，我们创建了一个刷新函数，可以通过定时任务调用：
+
+```sql
+CREATE OR REPLACE FUNCTION metrics.refresh_all_materialized_views()
+RETURNS void AS $$
+BEGIN
+  REFRESH MATERIALIZED VIEW CONCURRENTLY metrics.daily_active_users;
+  REFRESH MATERIALIZED VIEW CONCURRENTLY metrics.weekly_active_users;
+  REFRESH MATERIALIZED VIEW CONCURRENTLY metrics.monthly_active_users;
+  REFRESH MATERIALIZED VIEW CONCURRENTLY metrics.content_type_ctr;
+  REFRESH MATERIALIZED VIEW CONCURRENTLY metrics.user_staytime;
+  REFRESH MATERIALIZED VIEW CONCURRENTLY metrics.user_interaction_rate;
+  REFRESH MATERIALIZED VIEW CONCURRENTLY metrics.content_distribution;
+  REFRESH MATERIALIZED VIEW CONCURRENTLY metrics.ad_revenue;
+  REFRESH MATERIALIZED VIEW CONCURRENTLY metrics.product_revenue;
+  REFRESH MATERIALIZED VIEW CONCURRENTLY metrics.user_retention;
+END;
+$$ LANGUAGE plpgsql;
+```
+
+### API层
+
+指标看板的API层基于FastAPI实现，提供统一的接口格式，用于查询各类指标数据。所有接口遵循统一的响应格式：`{ code: number, data: any, msg: string }`。
+
+以下是核心API接口的实现示例：
+
+```python
+@router.get("/overview", response_model=ApiResponse)
+async def get_metrics_overview(db: AsyncSession = Depends(get_db)):
+    """获取指标概览数据"""
+    try:
+        # 获取今日DAU、广告收入、商品GMV等核心指标
+        dau_query = text("""
+            SELECT dau FROM metrics.daily_active_users 
+            WHERE day::date = CURRENT_DATE - INTERVAL '1 day'
+            LIMIT 1
+        """)
+        
+        # 执行查询并构建返回数据
+        dau_result = await db.execute(dau_query)
+        dau = dau_result.scalar() or 0
+        
+        # 计算环比增长
+        dau_growth_query = text("""
+            SELECT 
+                (t1.dau - t2.dau) / NULLIF(t2.dau, 0) * 100 as growth_rate
+            FROM 
+                (SELECT dau FROM metrics.daily_active_users WHERE day::date = CURRENT_DATE - INTERVAL '1 day') t1,
+                (SELECT dau FROM metrics.daily_active_users WHERE day::date = CURRENT_DATE - INTERVAL '2 day') t2
+        """)
+        
+        # 构建返回数据
+        data = {
+            "dau": {
+                "value": dau,
+                "growth": round(dau_growth, 2),
+                "trend": "up" if dau_growth >= 0 else "down"
+            },
+            # 其他指标...
+        }
+        
+        return {"code": 0, "data": data, "msg": ""}
+    except Exception as e:
+        raise AppException(code=5000, message=f"获取指标概览数据失败: {str(e)}")
+```
+
+常用的API接口包括：
+
+- `GET /api/v1/metrics/overview` - 获取核心指标概览
+- `GET /api/v1/metrics/dau` - 获取日活跃用户数据
+- `GET /api/v1/metrics/active-users` - 获取活跃用户数据（支持日/周/月）
+- `GET /api/v1/metrics/ad-revenue` - 获取广告收入数据
+- `GET /api/v1/metrics/product-revenue` - 获取商品收入数据
+- `GET /api/v1/metrics/retention` - 获取用户留存率数据
+
+### 前端实现
+
+Mini-Feeds的指标看板前端基于Next.js和shadcn/ui组件库实现，采用模块化设计，主要包括以下组件：
+
+1. **MetricsOverview** - 核心指标概览，展示DAU、广告收入、商品GMV等关键指标
+2. **MetricsCard** - 单个指标卡片，支持展示数值、趋势和迷你图表
+3. **ChartAreaInteractive** - 交互式面积图，用于展示时间序列数据
+4. **DataTableCTR** - 内容类型CTR数据表格，展示不同内容类型的点击率数据
+
+以MetricsCard组件为例，实现如下：
+
+```tsx
+export function MetricsCard({
+  title,
+  value,
+  description,
+  trend = "neutral",
+  trendValue,
+  trendText,
+  chartData,
+  dataKey = "value",
+  color = "var(--color-primary)",
+}: MetricsCardProps) {
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">{title}</CardTitle>
+        {description && <CardDescription>{description}</CardDescription>}
+      </CardHeader>
+      <CardContent>
+        <div className="text-2xl font-bold">{value}</div>
+        {trend !== "neutral" && trendValue && (
+          <div className="mt-1 flex items-center gap-1 text-sm">
+            <span
+              className={`flex items-center gap-1 ${trend === "up" ? "text-emerald-500" : "text-rose-500"}`}
+            >
+              {trend === "up" ? (
+                <IconTrendingUp className="size-4" />
+              ) : (
+                <IconTrendingDown className="size-4" />
+              )}
+              {trendValue}
+            </span>
+            {trendText && (
+              <span className="text-muted-foreground">{trendText}</span>
+            )}
+          </div>
+        )}
+        {chartData && chartData.length > 0 && (
+          <div className="mt-3 h-[80px]">
+            <ChartContainer>
+              <AreaChart
+                data={chartData}
+                margin={{ top: 0, right: 0, left: 0, bottom: 0 }}
+              >
+                <Area
+                  type="monotone"
+                  dataKey={dataKey}
+                  stroke={color}
+                  fill={`url(#gradient-${title})`}
+                  fillOpacity={1}
+                />
+              </AreaChart>
+            </ChartContainer>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+```
+
+指标页面使用标签页组织不同类型的指标，方便用户切换查看：
+
+```tsx
+export default function Page() {
+  return (
+    <SidebarProvider>
+      <AppSidebar variant="inset" />
+      <SidebarInset>
+        <SiteHeader />
+        <div className="flex flex-1 flex-col">
+          <div className="@container/main flex flex-1 flex-col gap-2">
+            <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
+              <div className="px-4 lg:px-6">
+                <h1 className="text-2xl font-bold tracking-tight">指标看板</h1>
+                <p className="text-muted-foreground">Mini Feeds 核心业务指标监控</p>
+              </div>
+              
+              <div className="px-4 lg:px-6">
+                <MetricsOverview />
+              </div>
+              
+              <div className="px-4 lg:px-6">
+                <Tabs defaultValue="content" className="w-full">
+                  <TabsList className="grid w-full grid-cols-4">
+                    <TabsTrigger value="content">内容指标</TabsTrigger>
+                    <TabsTrigger value="ads">广告指标</TabsTrigger>
+                    <TabsTrigger value="commerce">商品指标</TabsTrigger>
+                    <TabsTrigger value="users">用户指标</TabsTrigger>
+                  </TabsList>
+                  
+                  <TabsContent value="content" className="mt-4">
+                    <ChartAreaInteractive />
+                    <DataTableCTR />
+                  </TabsContent>
+                  
+                  {/* 其他标签页内容 */}
+                </Tabs>
+              </div>
+            </div>
+          </div>
+        </div>
+      </SidebarInset>
+    </SidebarProvider>
+  );
+}
+```
+
+## 指标分析与应用
+
+指标看板的价值在于其分析和应用，Mini-Feeds将指标数据应用于以下方面：
+
+1. **趋势分析**：分析指标的变化趋势，发现增长或下降的原因
+2. **对比分析**：对比不同时间段、不同内容类型的指标表现
+3. **异常检测**：发现指标的异常波动，及时响应和处理
+4. **效果评估**：评估产品改进、算法优化的效果
+5. **决策支持**：为产品决策提供数据支持
+
+<Callout type="info">
+  指标分析应该结合业务背景和用户行为，避免过度依赖单一指标。例如，CTR高不一定意味着用户体验好，可能是标题党或误导性内容导致的；同样，停留时间长也不一定意味着内容质量高，可能是内容难以理解导致的。
+</Callout>
+
+## 高级功能
+
+基于基础指标看板，可以实现更多高级功能：
+
+1. **实时监控**：近实时监控关键指标，及时发现问题
+2. **异常告警**：设置指标阈值，异常时自动告警
+3. **归因分析**：分析指标变化的原因，如产品改动、用户行为变化等
+4. **预测分析**：基于历史数据预测未来趋势
+5. **个性化报表**：根据不同角色的需求，提供个性化的报表
+
+## 小结
+
+基础指标看板是Mini-Feeds系统的重要组成部分，它通过可视化展示关键业务指标，帮助团队监控产品状态，发现问题和机会，做出数据驱动的决策。在设计指标看板时，需要考虑指标的全面性、实时性、多维性和易用性，构建一个高效、直观的业务监控系统。
+
+通过本章的学习，您已经了解了Mini-Feeds的基础功能模块，包括[Feeds流](/docs/2-basic-features/feeds-stream)、[用户交互系统](/docs/2-basic-features/user-interaction)、[用户埋点](/docs/2-basic-features/event-tracking)和基础指标看板。这些模块共同构成了Mini-Feeds的基础架构，为后续的高级功能提供了支持。
+
+在接下来的章节中，我们将深入探讨Mini-Feeds的高级功能，包括[推荐系统](/docs/3-recommendation)、[搜索与广告](/docs/4-search-ads)、[商业与营销](/docs/5-commerce-marketing)和[大模型应用](/docs/6-llm-applications)等。

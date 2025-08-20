@@ -211,6 +211,24 @@ fi
 echo -e "\n${BLUE}=== 启动开发环境 ===${NC}"
 echo -e "\n${YELLOW}1. 启动Docker容器（PostgreSQL、Redis、Adminer、SQLPad）...${NC}"
 cd "$PROJECT_ROOT/app/infra"
+
+# 检查是否存在数据卷，如果存在则提示用户是否要清空
+if docker volume ls | grep -q "infra_postgres_data"; then
+    echo -e "${YELLOW}检测到已存在的数据卷。PostgreSQL容器只在首次启动时执行初始化脚本。${NC}"
+    echo -e "${YELLOW}如果您修改了初始化脚本(如metrics_seed.sql)，建议清空数据卷以重新执行。${NC}"
+    read -p "是否清空数据卷并重新初始化？(y/n) " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        echo -e "${BLUE}正在清空数据卷...${NC}"
+        docker-compose down --volumes 2>/dev/null || true
+        docker volume rm infra_postgres_data infra_redis_data infra_sqlpad_data 2>/dev/null || true
+        echo -e "${GREEN}✓${NC} 数据卷已清空，将重新执行初始化脚本"
+    else
+        echo -e "${YELLOW}!${NC} 保留现有数据卷，初始化脚本可能不会重新执行"
+    fi
+fi
+
+# 启动容器
 if docker-compose -f docker-compose.yml up -d; then
     echo -e "${GREEN}✓${NC} Docker 容器启动成功"
 else
@@ -279,7 +297,7 @@ fi
 echo -e "\n${GREEN}=== Mini Feeds 开发环境启动完成 ===${NC}"
 echo -e "\n${BLUE}访问地址：${NC}"
 echo -e "${GREEN}- 前端:${NC} http://localhost:3000"
-echo -e "${GREEN}- 后端API:${NC} http://localhost:8000/docs"
+echo -e "${GREEN}- 后端API:${NC} http://localhost:8000/docs/1-architecture/system-overview"
 echo -e "${GREEN}- Adminer:${NC} http://localhost:8080"
 echo -e "  ${YELLOW}(服务器: postgres, 用户名: postgres, 密码: postgres, 数据库: mini_feeds)${NC}"
 echo -e "${GREEN}- SQLPad:${NC} http://localhost:3010"

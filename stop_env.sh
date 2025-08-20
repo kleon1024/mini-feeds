@@ -41,19 +41,23 @@ cd "$PROJECT_ROOT/app/infra"
 # 检查开发环境容器
 if docker-compose -f docker-compose.dev.yml ps -q | grep -q .; then
     echo "停止开发环境容器..."
-    docker-compose -f docker-compose.dev.yml down
+    docker-compose -f docker-compose.dev.yml down --volumes
 fi
 
 # 检查生产环境容器
 if docker-compose -f docker-compose.prod.yml ps -q | grep -q .; then
     echo "停止生产环境容器..."
-    docker-compose -f docker-compose.prod.yml down
+    docker-compose -f docker-compose.prod.yml down --volumes
 fi
 
 # 检查默认环境容器
 if docker-compose ps -q | grep -q .; then
     echo "停止默认环境容器..."
-    docker-compose down
+    docker-compose down --volumes
 fi
+
+# 确保删除所有数据卷，以便下次启动时重新执行初始化脚本
+echo "删除数据卷，确保下次启动时重新执行初始化脚本..."
+docker volume rm infra_postgres_data infra_redis_data infra_sqlpad_data 2>/dev/null || true
 
 echo "\n=== Mini Feeds 环境已完全停止 ==="

@@ -1,0 +1,349 @@
+---
+title: 前端架构
+description: Mini-Feeds 前端技术栈与实现细节
+date: 2023-04-03
+published: true
+category: 基础架构
+order: 3
+---
+
+Mini-Feeds的前端采用现代化的技术栈和架构模式，确保良好的用户体验和开发效率。本章将详细介绍前端架构的各个方面，包括技术选型、组件设计和状态管理策略。
+
+## 技术栈概览
+
+<Steps>
+
+### 核心框架：Next.js (App Router)
+
+**选择理由**：
+- **服务端渲染**：提供更好的首屏加载性能和SEO支持
+- **App Router**：基于React Server Components的新路由系统
+- **零配置**：内置TypeScript、路由、构建优化等功能
+- **增量静态再生成**：结合静态生成和服务端渲染的优势
+
+**实际应用**：
+- 使用App Router组织页面结构
+- 利用Server Components减少客户端JavaScript体积
+- 通过Route Handlers实现API端点
+
+### 开发语言：TypeScript
+
+**选择理由**：
+- **类型安全**：在编译时捕获潜在错误
+- **开发体验**：提供更好的代码补全和文档
+- **可维护性**：使代码更易于理解和重构
+
+**实际应用**：
+- 严格模式配置（strict: true）
+- 为所有组件和函数定义明确的类型
+- 利用类型推断减少冗余代码
+
+### UI框架：TailwindCSS + shadcn/ui
+
+**选择理由**：
+- **原子化CSS**：提高开发效率，减少CSS文件大小
+- **一致性**：确保UI设计的一致性
+- **可定制性**：易于根据项目需求定制
+- **shadcn/ui**：提供高质量、可定制的组件，非黑盒设计
+
+**实际应用**：
+- 使用Tailwind构建响应式布局
+- 采用shadcn/ui组件库实现一致的UI风格
+- 支持暗色/亮色主题切换
+
+### 状态管理：React Hooks + TanStack Query
+
+**选择理由**：
+- **简化状态管理**：使用React内置Hooks管理本地状态
+- **数据获取**：TanStack Query简化API调用和数据管理
+- **缓存**：智能缓存减少不必要的网络请求
+- **状态同步**：自动处理加载、错误和重试逻辑
+
+**实际应用**：
+- 使用useState和useReducer管理组件状态
+- 使用useQuery和useMutation处理API请求
+- 实现乐观更新提升用户体验
+
+</Steps>
+
+## 前端目录结构
+
+```
+/frontend
+  /app              # Next.js App Router页面
+    /(feed)         # 信息流相关页面
+      /page.tsx     # 主页面
+      /components/  # 页面特定组件
+    /item/[id]      # 内容详情页
+    /admin/         # 管理后台页面
+    /debug/         # 调试工具页面
+  /components       # 共享组件
+    /ui/            # 基础UI组件（shadcn/ui）
+  /hooks            # 自定义Hooks
+  /lib              # 工具函数和API客户端
+    /api.ts         # API请求封装
+    /track.ts       # 埋点工具
+  /styles           # 全局样式
+  /public           # 静态资源
+```
+
+## 核心组件设计
+
+<div className="grid grid-cols-1 md:grid-cols-2 gap-6 my-8">
+  <Card>
+    <CardHeader>
+      <CardTitle>CardPager</CardTitle>
+    </CardHeader>
+    <CardContent>
+      <p className="mb-2">管理信息流卡片的翻页、预取和键盘交互。</p>
+      <ul className="list-disc pl-5 space-y-1">
+        <li>维护当前卡片索引</li>
+        <li>处理键盘导航（左右箭头）</li>
+        <li>智能预取下一页内容</li>
+        <li>管理卡片数据缓存</li>
+      </ul>
+    </CardContent>
+  </Card>
+  
+  <Card>
+    <CardHeader>
+      <CardTitle>FeedCard</CardTitle>
+    </CardHeader>
+    <CardContent>
+      <p className="mb-2">统一的卡片展示组件，支持不同类型内容。</p>
+      <ul className="list-disc pl-5 space-y-1">
+        <li>内容卡片（默认样式）</li>
+        <li>广告卡片（带广告标识）</li>
+        <li>商品卡片（带价格信息）</li>
+        <li>统一的交互行为</li>
+      </ul>
+    </CardContent>
+  </Card>
+
+  <Card>
+    <CardHeader>
+      <CardTitle>ActiveExposure</CardTitle>
+    </CardHeader>
+    <CardContent>
+      <p className="mb-2">处理卡片曝光和停留时间统计。</p>
+      <ul className="list-disc pl-5 space-y-1">
+        <li>监测卡片可见性</li>
+        <li>计算停留时间</li>
+        <li>触发曝光事件（≥800ms）</li>
+        <li>批量上报优化</li>
+      </ul>
+    </CardContent>
+  </Card>
+  
+  <Card>
+    <CardHeader>
+      <CardTitle>互动组件</CardTitle>
+    </CardHeader>
+    <CardContent>
+      <p className="mb-2">用户交互组件集合。</p>
+      <ul className="list-disc pl-5 space-y-1">
+        <li>LikeButton（点赞按钮）</li>
+        <li>FavButton（收藏按钮）</li>
+        <li>PagerControls（翻页控制）</li>
+        <li>乐观更新策略</li>
+      </ul>
+    </CardContent>
+  </Card>
+</div>
+
+## 数据获取与状态管理
+
+### API客户端
+
+```typescript
+// lib/api.ts 示例
+import { toast } from "@/components/ui/use-toast";
+
+type ApiResponse<T> = {
+  code: number;
+  data: T;
+  msg: string;
+};
+
+export async function fetchApi<T>(
+  endpoint: string, 
+  options?: RequestInit
+): Promise<T> {
+  try {
+    const res = await fetch(`/api/v1${endpoint}`, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+      },
+    });
+    
+    const json = await res.json() as ApiResponse<T>;
+    
+    if (json.code !== 0) {
+      throw new Error(json.msg || "请求失败");
+    }
+    
+    return json.data;
+  } catch (error) {
+    toast({
+      title: "请求错误",
+      description: error instanceof Error ? error.message : "未知错误",
+      variant: "destructive",
+    });
+    throw error;
+  }
+}
+```
+
+### 数据获取Hooks
+
+```typescript
+// hooks/usePosts.ts 示例
+import { useQuery } from "@tanstack/react-query";
+import { fetchApi } from "@/lib/api";
+
+type Post = {
+  id: string;
+  type: "content" | "ad" | "product";
+  title: string;
+  // 其他字段...
+};
+
+type PostsResponse = {
+  items: Post[];
+  cursor: {
+    next: string;
+    prev: string;
+  };
+  server_time: string;
+};
+
+export function usePosts({
+  count = 10,
+  cursor,
+  scene = "feed",
+  slot = "feed_main",
+}) {
+  return useQuery({
+    queryKey: ["posts", { cursor, count, scene, slot }],
+    queryFn: () => fetchApi<PostsResponse>(
+      `/posts?count=${count}&cursor=${cursor || ""}&scene=${scene}&slot=${slot}`
+    ),
+    keepPreviousData: true,
+  });
+}
+```
+
+## 埋点系统
+
+```typescript
+// lib/track.ts 示例
+type EventType = "impression" | "staytime" | "click" | "like" | "favorite";
+
+type TrackEvent = {
+  user_id: string;
+  event_type: EventType;
+  ts: string;
+  source: string;
+  staytime_ms?: number;
+  extra: {
+    post_type: "content" | "ad" | "product";
+    post_id: number;
+    position: number;
+    trace_id: string;
+  };
+};
+
+const eventQueue: TrackEvent[] = [];
+let flushTimeout: NodeJS.Timeout | null = null;
+
+export function trackEvent(event: TrackEvent) {
+  eventQueue.push(event);
+  
+  // 批量上报：队列达到20条或1秒后触发
+  if (eventQueue.length >= 20) {
+    flushEvents();
+  } else if (!flushTimeout) {
+    flushTimeout = setTimeout(flushEvents, 1000);
+  }
+}
+
+function flushEvents() {
+  if (eventQueue.length === 0) return;
+  
+  const events = [...eventQueue];
+  eventQueue.length = 0;
+  
+  if (flushTimeout) {
+    clearTimeout(flushTimeout);
+    flushTimeout = null;
+  }
+  
+  // 优先使用sendBeacon，失败则回退到fetch
+  if (navigator.sendBeacon) {
+    const success = navigator.sendBeacon(
+      "/api/v1/events", 
+      JSON.stringify(events)
+    );
+    
+    if (success) return;
+  }
+  
+  // 回退方案
+  fetch("/api/v1/events", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(events),
+    keepalive: true,
+  }).catch(console.error);
+}
+
+// 页面离开时强制上报
+if (typeof window !== "undefined") {
+  window.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+      flushEvents();
+    }
+  });
+  
+  window.addEventListener("pagehide", flushEvents);
+}
+```
+
+## UI/样式规范
+
+### 容器规范
+
+```tsx
+<div className="max-w-[720px] mx-auto px-4">
+  {/* 内容 */}
+</div>
+```
+
+### 卡片规范
+
+```tsx
+<Card className="rounded-2xl border bg-card p-6 shadow-sm hover:shadow-md transition w-[720px] h-[220px]">
+  <CardHeader>
+    <CardTitle className="text-base md:text-lg font-medium truncate">
+      卡片标题
+    </CardTitle>
+  </CardHeader>
+  <CardContent>
+    <p className="text-xs text-muted-foreground">
+      卡片内容
+    </p>
+  </CardContent>
+</Card>
+```
+
+### 差异化样式
+
+- **内容卡片**：默认样式，可在左侧添加主色细条
+- **广告卡片**：左上角添加"广告"Badge
+- **商品卡片**：右下角显示价格信息
+
+## 下一步
+
+了解了前端架构后，我们将在下一章中探讨[后端架构](/docs/1-architecture/backend-architecture)，包括API设计、数据模型和业务逻辑实现。

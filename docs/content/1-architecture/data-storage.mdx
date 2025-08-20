@@ -1,0 +1,433 @@
+---
+title: 数据存储
+description: Mini-Feeds 数据模型与存储方案
+date: 2023-04-05
+published: true
+category: 基础架构
+order: 5
+---
+
+Mini-Feeds采用"一库走天下"的策略，使用PostgreSQL作为统一的数据存储解决方案。本章将详细介绍数据模型设计、索引策略和缓存机制，帮助您理解系统的数据层架构。
+
+## 数据库选型
+
+<Card>
+  <CardHeader>
+    <CardTitle>PostgreSQL 15+</CardTitle>
+  </CardHeader>
+  <CardContent>
+    <p className="mb-4">PostgreSQL作为主数据库，承担多种角色：</p>
+    <ul className="list-disc pl-5 space-y-2">
+      <li><strong>业务数据库</strong>：存储核心业务数据</li>
+      <li><strong>轻量级数据仓库</strong>：通过物化视图支持分析需求</li>
+      <li><strong>全文检索引擎</strong>：利用tsvector和GIN索引实现搜索</li>
+      <li><strong>向量数据库</strong>：通过pgvector扩展支持向量检索</li>
+    </ul>
+  </CardContent>
+  <CardFooter>
+    <p className="text-sm text-muted-foreground">关键扩展：pgvector、pg_trgm、uuid-ossp</p>
+  </CardFooter>
+</Card>
+
+<Callout type="info">
+  "一库走天下"策略减少了系统复杂性，降低了维护成本，同时提供了足够的功能支持各种应用场景。
+</Callout>
+
+## 数据分层
+
+<Steps>
+
+### 业务层（app schema）
+
+存储核心业务数据：
+
+- **app.users**：用户信息
+- **app.items**：内容/广告/商品
+- **app.events**：用户行为事件
+
+### 关系层（rel schema）
+
+存储用户与实体之间的关系：
+
+- **rel.user_entity_relations**：用户与实体的关系（关注、点赞、收藏、拉黑等）
+
+### 特征层（feature schema）
+
+存储机器学习相关的特征数据：
+
+- **feature.item_embeddings**：内容向量表示
+- **feature.user_profiles**：用户画像
+
+### 搜索层（search schema）
+
+存储搜索相关的数据：
+
+- **search.item_ft**：全文检索物化视图
+
+### 广告层（ads schema）
+
+存储广告相关的数据：
+
+- **ads.advertisers**：广告主信息
+- **ads.campaigns**：广告活动
+- **ads.creatives**：广告创意
+- **ads.slots**：广告位
+- **ads.daily_budget**：预算与消耗
+- **ads.freq_cap_counter**：频控计数器
+
+### 指标层（metrics schema）
+
+存储业务指标数据：
+
+- **metrics.***：各类指标物化视图
+
+### 运维层（ops schema）
+
+存储运维相关的数据：
+
+- **ops.sql_tasks**：SQL任务
+- **ops.sql_runs**：SQL执行记录
+
+</Steps>
+
+## 核心表结构
+
+### 用户表（app.users）
+
+```sql
+CREATE TABLE app.users (
+  id BIGSERIAL PRIMARY KEY,
+  username TEXT NOT NULL,
+  tags JSONB DEFAULT '[]',
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+```
+
+### 内容表（app.items）
+
+```sql
+CREATE TABLE app.items (
+  id BIGSERIAL PRIMARY KEY,
+  title TEXT NOT NULL,
+  content TEXT,
+  tags JSONB DEFAULT '[]',
+  author_id BIGINT REFERENCES app.users(id),
+  media JSONB DEFAULT '{}',
+  kind TEXT CHECK (kind IN ('content', 'ad', 'product')) DEFAULT 'content',
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+```
+
+### 事件表（app.events）
+
+```sql
+CREATE TABLE app.events (
+  id BIGSERIAL PRIMARY KEY,
+  user_id BIGINT,
+  item_id BIGINT,
+  event_type TEXT,
+  ts TIMESTAMPTZ DEFAULT now(),
+  source TEXT,
+  staytime_ms INT,
+  gmv_amount NUMERIC(12,2),
+  extra JSONB DEFAULT '{}'
+);
+```
+
+### 用户关系表（rel.user_entity_relations）
+
+```sql
+CREATE TABLE rel.user_entity_relations (
+  user_id BIGINT NOT NULL,
+  entity_type TEXT NOT NULL,
+  entity_id BIGINT NOT NULL,
+  relation_type TEXT NOT NULL,
+  status TEXT CHECK (status IN ('active', 'inactive')) NOT NULL,
+  strength REAL,
+  score REAL,
+  last_interact_at TIMESTAMPTZ DEFAULT now(),
+  expire_at TIMESTAMPTZ,
+  attrs JSONB DEFAULT '{}',
+  CONSTRAINT user_entity_relation_unique UNIQUE (user_id, entity_type, entity_id, relation_type) WHERE status = 'active'
+);
+```
+
+### 内容向量表（feature.item_embeddings）
+
+```sql
+CREATE TABLE feature.item_embeddings (
+  item_id BIGINT PRIMARY KEY REFERENCES app.items(id),
+  emb vector(384),  -- 或 vector(768)
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+```
+
+### 全文检索视图（search.item_ft）
+
+```sql
+CREATE MATERIALIZED VIEW search.item_ft AS
+SELECT 
+  id AS item_id,
+  setweight(to_tsvector('chinese', coalesce(title, '')), 'A') ||
+  setweight(to_tsvector('chinese', coalesce(content, '')), 'B') ||
+  setweight(to_tsvector('chinese', coalesce(tags::text, '')), 'C') AS tsv
+FROM app.items;
+```
+
+## 索引策略
+
+<div className="grid grid-cols-1 md:grid-cols-2 gap-6 my-8">
+  <Card>
+    <CardHeader>
+      <CardTitle>事件索引</CardTitle>
+    </CardHeader>
+    <CardContent>
+      <ul className="list-disc pl-5 space-y-2">
+        <li>events(user_id, ts DESC)</li>
+        <li>events(item_id, ts DESC)</li>
+        <li>events(event_type)</li>
+      </ul>
+    </CardContent>
+  </Card>
+  
+  <Card>
+    <CardHeader>
+      <CardTitle>JSONB索引</CardTitle>
+    </CardHeader>
+    <CardContent>
+      <ul className="list-disc pl-5 space-y-2">
+        <li>users.tags GIN (jsonb_path_ops)</li>
+        <li>items.tags GIN (jsonb_path_ops)</li>
+      </ul>
+    </CardContent>
+  </Card>
+
+  <Card>
+    <CardHeader>
+      <CardTitle>全文检索索引</CardTitle>
+    </CardHeader>
+    <CardContent>
+      <ul className="list-disc pl-5 space-y-2">
+        <li>search.item_ft(tsv) GIN</li>
+      </ul>
+    </CardContent>
+  </Card>
+  
+  <Card>
+    <CardHeader>
+      <CardTitle>向量索引</CardTitle>
+    </CardHeader>
+    <CardContent>
+      <ul className="list-disc pl-5 space-y-2">
+        <li>feature.item_embeddings(emb) IVFFLAT (vector_cosine) WITH (lists=100)</li>
+      </ul>
+    </CardContent>
+  </Card>
+</div>
+
+### 分区策略
+
+对于高频写入的表（如app.events），可以采用分区策略：
+
+```sql
+CREATE TABLE app.events (
+  id BIGSERIAL,
+  user_id BIGINT,
+  item_id BIGINT,
+  event_type TEXT,
+  ts TIMESTAMPTZ DEFAULT now(),
+  source TEXT,
+  staytime_ms INT,
+  gmv_amount NUMERIC(12,2),
+  extra JSONB DEFAULT '{}'
+) PARTITION BY RANGE (ts);
+
+-- 创建每周分区
+CREATE TABLE app.events_y2023_w01 PARTITION OF app.events
+  FOR VALUES FROM ('2023-01-01') TO ('2023-01-08');
+
+CREATE TABLE app.events_y2023_w02 PARTITION OF app.events
+  FOR VALUES FROM ('2023-01-08') TO ('2023-01-15');
+
+-- 索引在分区表上创建
+CREATE INDEX idx_events_y2023_w01_user_ts ON app.events_y2023_w01 (user_id, ts DESC);
+```
+
+## 缓存策略
+
+<Steps>
+
+### Redis缓存
+
+Redis用于以下场景：
+
+- **频控缓存**：广告展示频控
+- **短期数据缓存**：热点内容列表
+- **幂等键存储**：防止重复请求
+- **分布式锁**：并发控制
+
+### 缓存模式
+
+- **Cache-Aside**：先查缓存，缓存未命中时查数据库并更新缓存
+- **Write-Through**：写入数据时同时更新缓存和数据库
+- **TTL策略**：根据数据更新频率设置合理的TTL
+
+### 热点数据缓存
+
+```python
+# 热点内容列表缓存示例
+async def get_hot_items(limit: int = 20, cache_ttl: int = 300):
+    # 尝试从缓存获取
+    cache_key = f"feed:hot:global:limit:{limit}"
+    cached = await redis.get(cache_key)
+    
+    if cached:
+        return json.loads(cached)
+    
+    # 缓存未命中，从数据库获取
+    query = """
+    SELECT i.id, i.title, i.tags, i.created_at
+    FROM app.items i
+    JOIN (
+        SELECT item_id, COUNT(*) as event_count
+        FROM app.events
+        WHERE event_type = 'impression'
+        AND ts > NOW() - INTERVAL '24 HOURS'
+        GROUP BY item_id
+        ORDER BY event_count DESC
+        LIMIT :limit
+    ) e ON i.id = e.item_id
+    WHERE i.kind = 'content'
+    """
+    
+    result = await db.fetch_all(query, {"limit": limit})
+    items = [dict(row) for row in result]
+    
+    # 更新缓存
+    await redis.set(
+        cache_key,
+        json.dumps(items),
+        ex=cache_ttl  # 5分钟过期
+    )
+    
+    return items
+```
+
+### 广告频控缓存
+
+```python
+# 广告频控示例
+async def check_and_update_freq_cap(
+    user_id: str,
+    campaign_id: int,
+    cap_daily: int
+) -> bool:
+    # 缓存键
+    cache_key = f"ad:freq_cap:{user_id}:{campaign_id}:{datetime.now().strftime('%Y-%m-%d')}"
+    
+    # 获取当前计数
+    current_count = await redis.get(cache_key)
+    current_count = int(current_count) if current_count else 0
+    
+    # 检查是否超过上限
+    if current_count >= cap_daily:
+        return False
+    
+    # 增加计数并设置过期时间（当天结束）
+    tomorrow = datetime.now().replace(hour=0, minute=0, second=0) + timedelta(days=1)
+    ttl = int((tomorrow - datetime.now()).total_seconds())
+    
+    await redis.incr(cache_key)
+    await redis.expire(cache_key, ttl)
+    
+    return True
+```
+
+</Steps>
+
+## 物化视图
+
+物化视图用于预计算复杂查询，提高查询性能：
+
+```sql
+-- 内容全文检索物化视图
+CREATE MATERIALIZED VIEW search.item_ft AS
+SELECT 
+  id AS item_id,
+  setweight(to_tsvector('chinese', coalesce(title, '')), 'A') ||
+  setweight(to_tsvector('chinese', coalesce(content, '')), 'B') ||
+  setweight(to_tsvector('chinese', coalesce(tags::text, '')), 'C') AS tsv
+FROM app.items;
+
+-- 创建索引
+CREATE INDEX idx_item_ft_tsv ON search.item_ft USING GIN(tsv);
+
+-- 刷新物化视图
+REFRESH MATERIALIZED VIEW CONCURRENTLY search.item_ft;
+```
+
+### 指标物化视图
+
+```sql
+-- 每日CTR指标物化视图
+CREATE MATERIALIZED VIEW metrics.daily_ctr AS
+SELECT
+  DATE_TRUNC('day', e.ts) AS day,
+  i.kind,
+  COUNT(DISTINCT CASE WHEN e.event_type = 'impression' THEN e.id END) AS impressions,
+  COUNT(DISTINCT CASE WHEN e.event_type = 'click' THEN e.id END) AS clicks,
+  CASE 
+    WHEN COUNT(DISTINCT CASE WHEN e.event_type = 'impression' THEN e.id END) > 0 
+    THEN ROUND(COUNT(DISTINCT CASE WHEN e.event_type = 'click' THEN e.id END)::NUMERIC / 
+             COUNT(DISTINCT CASE WHEN e.event_type = 'impression' THEN e.id END), 4)
+    ELSE 0
+  END AS ctr
+FROM app.events e
+JOIN app.items i ON e.item_id = i.id
+WHERE e.ts >= CURRENT_DATE - INTERVAL '30 days'
+AND e.event_type IN ('impression', 'click')
+GROUP BY DATE_TRUNC('day', e.ts), i.kind
+ORDER BY day DESC, kind;
+```
+
+## 数据库连接管理
+
+```python
+# db/session.py 示例
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.orm import sessionmaker
+from core.config import settings
+
+# 创建异步引擎
+engine = create_async_engine(
+    settings.DATABASE_URL,
+    echo=settings.DB_ECHO,
+    pool_size=settings.DB_POOL_SIZE,
+    max_overflow=settings.DB_MAX_OVERFLOW,
+    pool_timeout=settings.DB_POOL_TIMEOUT,
+    pool_recycle=settings.DB_POOL_RECYCLE,
+)
+
+# 创建会话工厂
+async_session = sessionmaker(
+    engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+)
+
+# 依赖注入函数
+async def get_db():
+    async with async_session() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+```
+
+## 下一步
+
+了解了数据存储后，我们将在下一章中探讨[机器学习组件](/docs/1-architecture/ml-components)，包括推荐系统、向量检索和大模型应用。

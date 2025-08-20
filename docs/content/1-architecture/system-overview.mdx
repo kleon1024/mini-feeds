@@ -1,0 +1,140 @@
+---
+title: 系统概述
+description: Mini-Feeds 系统整体介绍
+date: 2023-04-01
+published: true
+category: 基础架构
+order: 1
+---
+
+Mini-Feeds 是一个现代化的信息流应用，旨在提供个性化的内容推荐、搜索、广告和商品服务。本章节将从整体角度介绍系统架构，帮助您快速了解项目的核心组成部分。
+
+<Callout type="info" icon="ℹ️">
+  本文档采用循序渐进的方式，从整体到细节，帮助您全面理解Mini-Feeds的架构设计。
+</Callout>
+
+## 系统架构概览
+
+<Steps>
+
+### 第一步：了解整体架构
+
+Mini-Feeds采用前后端分离的架构，主要由以下几个核心部分组成：
+
+- **前端应用**：基于Next.js构建的用户界面
+- **后端服务**：基于FastAPI的API服务
+- **数据存储**：PostgreSQL数据库和Redis缓存
+- **推荐引擎**：个性化内容推荐系统
+- **搜索服务**：全文检索和语义搜索
+- **广告系统**：广告投放和效果评估
+- **大模型应用**：LLM增强的内容生成和理解
+
+### 第二步：理解数据流
+
+用户与系统的交互流程：
+
+1. 用户访问前端应用
+2. 前端向后端API请求数据
+3. 后端服务处理请求，调用相关服务（推荐、搜索、广告等）
+4. 数据从数据库或缓存中获取
+5. 后端将处理后的数据返回给前端
+6. 前端渲染内容并展示给用户
+7. 用户交互行为被记录并用于后续推荐优化
+
+### 第三步：掌握核心功能
+
+</Steps>
+
+## 核心功能
+
+<div className="grid grid-cols-1 md:grid-cols-2 gap-6 my-8">
+  <Card>
+    <CardHeader>
+      <CardTitle>信息流推荐</CardTitle>
+    </CardHeader>
+    <CardContent>
+      <ul className="list-disc pl-5 space-y-2">
+        <li>基于用户历史行为的个性化推荐</li>
+        <li>多样化内容混合策略</li>
+        <li>实时热点内容推送</li>
+        <li>基于标签和向量的相似内容推荐</li>
+      </ul>
+    </CardContent>
+  </Card>
+  
+  <Card>
+    <CardHeader>
+      <CardTitle>搜索功能</CardTitle>
+    </CardHeader>
+    <CardContent>
+      <ul className="list-disc pl-5 space-y-2">
+        <li>全文检索（基于PostgreSQL的全文搜索）</li>
+        <li>语义搜索（向量检索）</li>
+        <li>查询理解与改写（LLM增强）</li>
+        <li>搜索结果排序与过滤</li>
+      </ul>
+    </CardContent>
+  </Card>
+
+  <Card>
+    <CardHeader>
+      <CardTitle>广告系统</CardTitle>
+    </CardHeader>
+    <CardContent>
+      <ul className="list-disc pl-5 space-y-2">
+        <li>基于上下文的广告匹配</li>
+        <li>实时竞价与定价</li>
+        <li>广告效果评估与优化</li>
+        <li>频控与节奏控制</li>
+      </ul>
+    </CardContent>
+  </Card>
+  
+  <Card>
+    <CardHeader>
+      <CardTitle>大模型应用</CardTitle>
+    </CardHeader>
+    <CardContent>
+      <ul className="list-disc pl-5 space-y-2">
+        <li>内容生成</li>
+        <li>推荐理由生成</li>
+        <li>查询理解与改写</li>
+        <li>智能客服对话</li>
+      </ul>
+    </CardContent>
+  </Card>
+</div>
+
+## 项目结构
+
+```
+/app
+  /backend
+    /src
+      /api            # FastAPI routers (/api/v1)
+      /core           # config, logging, middlewares, deps
+      /db             # models, schemas, migrations (Alembic)
+      /services       # rec / search / ads / commerce / blend / feature / ops
+      /workers        # jobs：样本、训练、物化视图刷新
+    alembic.ini
+  /frontend
+    /app              # Next.js App Router pages
+    /components
+    /lib              # api client, hooks
+    /styles
+  /infra
+    docker-compose.yml
+    /sql              # init.sql、视图/物化视图/索引脚本
+```
+
+## 下一步
+
+在接下来的章节中，我们将详细介绍：
+
+1. [架构原则](/docs/1-architecture/architecture-principles) - 指导项目开发的核心原则
+2. [前端架构](/docs/1-architecture/frontend-architecture) - 前端技术栈与实现细节
+3. [后端架构](/docs/1-architecture/backend-architecture) - 后端服务设计与API契约
+4. [数据存储](/docs/1-architecture/data-storage) - 数据模型与存储方案
+5. [机器学习组件](/docs/1-architecture/ml-components) - 推荐系统与机器学习基础设施
+
+通过这些章节，您将全面了解Mini-Feeds的架构设计，为后续深入学习各个功能模块打下基础。

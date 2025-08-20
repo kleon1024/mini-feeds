@@ -1,0 +1,721 @@
+---
+title: 机器学习组件
+description: Mini-Feeds 推荐系统与机器学习基础设施
+date: 2023-04-06
+published: true
+category: 基础架构
+order: 6
+---
+
+Mini-Feeds集成了多种机器学习组件，为用户提供个性化的内容推荐、相似内容发现和智能内容生成。本章将详细介绍系统中的机器学习组件，包括推荐系统、向量检索和大模型应用。
+
+## 推荐系统架构
+
+<Steps>
+
+### 多路召回
+
+从多个来源获取候选内容：
+
+- **标签聚合**：基于用户兴趣标签匹配内容
+- **协同过滤**：使用implicit库实现ItemCF/ALS
+- **向量检索**：使用pgvector查找相似内容
+- **热门内容**：基于全局热度指标
+
+### 特征工程
+
+构建用于排序的特征：
+
+- **用户特征**：人口统计学特征、行为特征、兴趣标签
+- **内容特征**：内容属性、热度指标、质量分
+- **上下文特征**：时间、位置、设备类型
+- **交叉特征**：用户-内容交互特征
+
+### 精排模型
+
+使用机器学习模型进行精确排序：
+
+- **模型选择**：LightGBM/XGBoost
+- **目标函数**：点击率预测（CTR）
+- **模型训练**：离线训练，定期更新
+- **模型部署**：通过MLflow管理和部署
+
+### 混排策略
+
+将不同类型的内容混合展示：
+
+- **分数归一化**：统一不同来源内容的分数
+- **位置策略**：控制广告、商品的展示位置
+- **多样性提升**：内容类型、主题多样性
+- **新鲜度考虑**：时间衰减因子
+
+</Steps>
+
+## 核心机器学习组件
+
+<div className="grid grid-cols-1 md:grid-cols-2 gap-6 my-8">
+  <Card>
+    <CardHeader>
+      <CardTitle>LightGBM/XGBoost</CardTitle>
+    </CardHeader>
+    <CardContent>
+      <p className="mb-2">用于精排的梯度提升决策树模型。</p>
+      <ul className="list-disc pl-5 space-y-1">
+        <li>高效的梯度提升实现</li>
+        <li>支持分类和回归任务</li>
+        <li>特征重要性分析</li>
+        <li>处理大规模数据集</li>
+      </ul>
+    </CardContent>
+  </Card>
+  
+  <Card>
+    <CardHeader>
+      <CardTitle>implicit</CardTitle>
+    </CardHeader>
+    <CardContent>
+      <p className="mb-2">用于协同过滤的Python库。</p>
+      <ul className="list-disc pl-5 space-y-1">
+        <li>实现多种协同过滤算法</li>
+        <li>支持隐式反馈数据</li>
+        <li>高效的ALS和ItemCF实现</li>
+        <li>可扩展到大型数据集</li>
+      </ul>
+    </CardContent>
+  </Card>
+
+  <Card>
+    <CardHeader>
+      <CardTitle>pgvector</CardTitle>
+    </CardHeader>
+    <CardContent>
+      <p className="mb-2">PostgreSQL的向量扩展。</p>
+      <ul className="list-disc pl-5 space-y-1">
+        <li>存储和检索向量数据</li>
+        <li>支持多种距离度量</li>
+        <li>IVFFlat索引加速查询</li>
+        <li>与PostgreSQL无缝集成</li>
+      </ul>
+    </CardContent>
+  </Card>
+  
+  <Card>
+    <CardHeader>
+      <CardTitle>MLflow</CardTitle>
+    </CardHeader>
+    <CardContent>
+      <p className="mb-2">机器学习生命周期管理平台。</p>
+      <ul className="list-disc pl-5 space-y-1">
+        <li>实验追踪记录</li>
+        <li>模型版本管理</li>
+        <li>模型注册与部署</li>
+        <li>参数和指标记录</li>
+      </ul>
+    </CardContent>
+  </Card>
+</div>
+
+## 样本生成与模型训练
+
+### 样本生成流程
+
+```python
+# workers/sample/generate_ctr_samples.py 示例
+async def generate_ctr_samples(days_back: int = 7):
+    """生成CTR预测样本"""
+    # 查询曝光事件
+    impression_query = """
+    SELECT 
+        e.id, e.user_id, e.item_id, e.ts, e.source, e.extra,
+        i.title, i.tags, i.kind, i.created_at
+    FROM app.events e
+    JOIN app.items i ON e.item_id = i.id
+    WHERE e.event_type = 'impression'
+    AND e.ts > NOW() - INTERVAL ':days_back days'
+    """
+    
+    impressions = await db.fetch_all(
+        impression_query, {"days_back": days_back}
+    )
+    
+    # 查询点击事件
+    click_query = """
+    SELECT e.id, e.user_id, e.item_id
+    FROM app.events e
+    WHERE e.event_type = 'click'
+    AND e.ts > NOW() - INTERVAL ':days_back days'
+    """
+    
+    clicks = await db.fetch_all(click_query, {"days_back": days_back})
+    
+    # 构建点击映射
+    click_map = {}
+    for click in clicks:
+        user_item_key = f"{click['user_id']}_{click['item_id']}"
+        click_map[user_item_key] = 1
+    
+    # 构建样本
+    samples = []
+    for imp in impressions:
+        user_id = imp["user_id"]
+        item_id = imp["item_id"]
+        user_item_key = f"{user_id}_{item_id}"
+        
+        # 标签：是否点击
+        label = 1 if user_item_key in click_map else 0
+        
+        # 提取用户特征
+        user_features = await get_user_features(user_id)
+        
+        # 提取内容特征
+        item_features = {
+            "title_length": len(imp["title"]),
+            "tag_count": len(imp["tags"]),
+            "kind": imp["kind"],
+            "age_days": (datetime.now() - imp["created_at"]).days
+        }
+        
+        # 提取上下文特征
+        context_features = {
+            "hour": imp["ts"].hour,
+            "weekday": imp["ts"].weekday(),
+            "source": imp["source"],
+            "position": imp["extra"].get("position", 0)
+        }
+        
+        # 合并特征
+        features = {**user_features, **item_features, **context_features}
+        
+        # 添加样本
+        samples.append({
+            "label": label,
+            "features": features,
+            "user_id": user_id,
+            "item_id": item_id,
+            "ts": imp["ts"]
+        })
+    
+    # 保存样本
+    df = pd.DataFrame(samples)
+    df.to_parquet(f"data/ctr_samples_{datetime.now().strftime('%Y%m%d')}.parquet")
+    
+    return len(samples)
+```
+
+### 模型训练流程
+
+```python
+# workers/training/train_ctr_model.py 示例
+def train_ctr_model(sample_path: str, experiment_name: str = "ctr_prediction"):
+    """训练CTR预测模型"""
+    # 设置MLflow
+    mlflow.set_experiment(experiment_name)
+    
+    # 加载样本
+    df = pd.read_parquet(sample_path)
+    
+    # 特征处理
+    features = df["features"].apply(pd.Series)
+    labels = df["label"]
+    
+    # 类别特征编码
+    cat_features = ["kind", "source"]
+    for col in cat_features:
+        features[col] = features[col].astype("category")
+    
+    # 训练测试分割
+    X_train, X_test, y_train, y_test = train_test_split(
+        features, labels, test_size=0.2, random_state=42
+    )
+    
+    # 定义模型参数
+    params = {
+        "objective": "binary",
+        "metric": "auc",
+        "boosting_type": "gbdt",
+        "learning_rate": 0.05,
+        "num_leaves": 31,
+        "max_depth": -1,
+        "min_child_samples": 20,
+        "subsample": 0.8,
+        "colsample_bytree": 0.8,
+        "reg_alpha": 0.1,
+        "reg_lambda": 0.1,
+        "random_state": 42
+    }
+    
+    # 开始MLflow记录
+    with mlflow.start_run() as run:
+        # 记录参数
+        mlflow.log_params(params)
+        
+        # 训练模型
+        model = lgb.LGBMClassifier(**params)
+        model.fit(
+            X_train, y_train,
+            eval_set=[(X_test, y_test)],
+            eval_metric="auc",
+            early_stopping_rounds=50,
+            verbose=100
+        )
+        
+        # 评估模型
+        y_pred = model.predict_proba(X_test)[:, 1]
+        auc = roc_auc_score(y_test, y_pred)
+        log_loss_val = log_loss(y_test, y_pred)
+        
+        # 记录指标
+        mlflow.log_metric("auc", auc)
+        mlflow.log_metric("log_loss", log_loss_val)
+        
+        # 记录特征重要性
+        feature_importance = pd.DataFrame({
+            "feature": features.columns,
+            "importance": model.feature_importances_
+        }).sort_values("importance", ascending=False)
+        
+        fig, ax = plt.subplots(figsize=(10, 6))
+        sns.barplot(x="importance", y="feature", data=feature_importance.head(20), ax=ax)
+        plt.title("Feature Importance")
+        plt.tight_layout()
+        
+        # 保存图表
+        plt.savefig("feature_importance.png")
+        mlflow.log_artifact("feature_importance.png")
+        
+        # 记录模型
+        mlflow.lightgbm.log_model(model, "model")
+        
+        # 注册模型
+        model_uri = f"runs:/{run.info.run_id}/model"
+        mv = mlflow.register_model(model_uri, "ctr_model")
+        
+        return {
+            "run_id": run.info.run_id,
+            "model_version": mv.version,
+            "auc": auc,
+            "log_loss": log_loss_val
+        }
+```
+
+## 向量检索实现
+
+### 内容向量生成
+
+```python
+# services/feature/embeddings.py 示例
+async def generate_item_embedding(item_id: int):
+    """为内容生成向量表示"""
+    # 获取内容信息
+    query = """
+    SELECT id, title, content, tags
+    FROM app.items
+    WHERE id = :item_id
+    """
+    
+    item = await db.fetch_one(query, {"item_id": item_id})
+    if not item:
+        raise ValueError(f"Item {item_id} not found")
+    
+    # 构建文本
+    text = f"{item['title']} {item['content'] or ''}"
+    if item['tags']:
+        tags_text = ' '.join([tag for tag in item['tags']])
+        text = f"{text} {tags_text}"
+    
+    # 使用模型生成向量
+    embedding = await get_embedding(text)
+    
+    # 存储向量
+    insert_query = """
+    INSERT INTO feature.item_embeddings (item_id, emb, updated_at)
+    VALUES (:item_id, :emb, NOW())
+    ON CONFLICT (item_id) DO UPDATE
+    SET emb = :emb, updated_at = NOW()
+    """
+    
+    await db.execute(
+        insert_query,
+        {"item_id": item_id, "emb": embedding}
+    )
+    
+    return embedding
+
+async def get_embedding(text: str):
+    """获取文本的向量表示"""
+    # 这里可以使用OpenAI API或本地模型
+    try:
+        # 使用OpenAI API
+        response = await openai.Embedding.acreate(
+            input=text,
+            model="text-embedding-ada-002"
+        )
+        return response["data"][0]["embedding"]
+    except Exception as e:
+        logger.error(f"Error generating embedding: {e}")
+        # 回退到本地模型
+        return await get_local_embedding(text)
+
+async def get_local_embedding(text: str):
+    """使用本地模型获取向量表示"""
+    # 使用sentence-transformers
+    model = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
+    embedding = model.encode(text)
+    return embedding.tolist()
+```
+
+### 相似内容检索
+
+```python
+# services/rec/vector_recall.py 示例
+async def find_similar_items(item_id: int, limit: int = 10):
+    """查找与给定内容相似的内容"""
+    # 获取内容向量
+    query = """
+    SELECT emb
+    FROM feature.item_embeddings
+    WHERE item_id = :item_id
+    """
+    
+    result = await db.fetch_one(query, {"item_id": item_id})
+    if not result:
+        # 内容没有向量，生成向量
+        embedding = await generate_item_embedding(item_id)
+    else:
+        embedding = result["emb"]
+    
+    # 查询相似内容
+    similar_query = """
+    SELECT i.id, i.title, i.tags, i.kind, i.created_at,
+           1 - (e.emb <=> :emb) AS similarity
+    FROM feature.item_embeddings e
+    JOIN app.items i ON e.item_id = i.id
+    WHERE i.id != :item_id
+    ORDER BY e.emb <=> :emb
+    LIMIT :limit
+    """
+    
+    similar_items = await db.fetch_all(
+        similar_query,
+        {"item_id": item_id, "emb": embedding, "limit": limit}
+    )
+    
+    return [dict(item) for item in similar_items]
+
+async def vector_search(query_text: str, limit: int = 20):
+    """基于向量的语义搜索"""
+    # 获取查询向量
+    query_embedding = await get_embedding(query_text)
+    
+    # 向量检索
+    search_query = """
+    SELECT i.id, i.title, i.tags, i.kind, i.created_at,
+           1 - (e.emb <=> :emb) AS similarity
+    FROM feature.item_embeddings e
+    JOIN app.items i ON e.item_id = i.id
+    WHERE i.kind = 'content'
+    ORDER BY e.emb <=> :emb
+    LIMIT :limit
+    """
+    
+    results = await db.fetch_all(
+        search_query,
+        {"emb": query_embedding, "limit": limit}
+    )
+    
+    return [dict(item) for item in results]
+```
+
+## 大模型应用
+
+<Callout type="warning" icon="⚠️">
+  大模型仅作为增强功能，不阻塞主链路。在大模型API不可用时，系统应该能够降级到基础功能。
+</Callout>
+
+### 推荐理由生成
+
+```python
+# services/rec/reason_generator.py 示例
+async def generate_recommendation_reason(
+    user_id: int,
+    item_id: int,
+    fallback_reason: str = "根据你的兴趣推荐"
+):
+    """生成个性化推荐理由"""
+    try:
+        # 获取用户信息
+        user_query = """
+        SELECT username, tags
+        FROM app.users
+        WHERE id = :user_id
+        """
+        
+        user = await db.fetch_one(user_query, {"user_id": user_id})
+        if not user:
+            return fallback_reason
+        
+        # 获取内容信息
+        item_query = """
+        SELECT title, tags, kind
+        FROM app.items
+        WHERE id = :item_id
+        """
+        
+        item = await db.fetch_one(item_query, {"item_id": item_id})
+        if not item:
+            return fallback_reason
+        
+        # 获取用户-内容交互历史
+        history_query = """
+        SELECT i.title, i.tags, e.event_type
+        FROM app.events e
+        JOIN app.items i ON e.item_id = i.id
+        WHERE e.user_id = :user_id
+        AND e.event_type IN ('click', 'like', 'favorite')
+        ORDER BY e.ts DESC
+        LIMIT 5
+        """
+        
+        history = await db.fetch_all(history_query, {"user_id": user_id})
+        
+        # 构建提示
+        prompt = f"""根据以下信息，生成一个简短、自然的推荐理由（不超过15个字）：
+        
+        用户信息：
+        - 兴趣标签：{', '.join(user['tags']) if user['tags'] else '未知'}
+        
+        推荐内容：
+        - 标题：{item['title']}
+        - 标签：{', '.join(item['tags']) if item['tags'] else '未知'}
+        
+        用户最近互动的内容：
+        {' '.join([f"- {h['title']}" for h in history]) if history else '- 无'}
+        
+        推荐理由："""
+        
+        # 调用LLM API
+        response = await openai.ChatCompletion.acreate(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "你是一个推荐系统助手，负责生成简短、自然的推荐理由。"},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=30,
+            temperature=0.7
+        )
+        
+        reason = response.choices[0].message.content.strip()
+        
+        # 截断过长的理由
+        if len(reason) > 15:
+            reason = reason[:15]
+        
+        return reason
+    except Exception as e:
+        logger.error(f"Error generating recommendation reason: {e}")
+        return fallback_reason
+```
+
+### 查询理解与改写
+
+```python
+# services/search/query_rewriter.py 示例
+async def rewrite_search_query(
+    original_query: str,
+    fallback: bool = True
+):
+    """理解并改写搜索查询"""
+    try:
+        # 构建提示
+        prompt = f"""请分析以下搜索查询，并将其改写为更有效的搜索关键词。
+        如果查询包含多个概念，请将它们分开。
+        如果查询有拼写错误，请纠正。
+        如果查询太宽泛，请尝试使其更具体。
+        
+        原始查询：{original_query}
+        
+        改写后的查询："""
+        
+        # 调用LLM API
+        response = await openai.ChatCompletion.acreate(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "你是一个搜索引擎助手，负责理解和改写用户的搜索查询。"},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=50,
+            temperature=0.3
+        )
+        
+        rewritten_query = response.choices[0].message.content.strip()
+        
+        return {
+            "original_query": original_query,
+            "rewritten_query": rewritten_query,
+            "rewritten": True
+        }
+    except Exception as e:
+        logger.error(f"Error rewriting search query: {e}")
+        if fallback:
+            return {
+                "original_query": original_query,
+                "rewritten_query": original_query,
+                "rewritten": False
+            }
+        raise
+```
+
+### 广告文案生成
+
+```python
+# services/ads/creative_generator.py 示例
+async def generate_ad_creative(
+    product_name: str,
+    product_description: str,
+    target_audience: str,
+    fallback_title: str = None
+):
+    """生成广告文案"""
+    try:
+        # 构建提示
+        prompt = f"""请为以下产品生成一个吸引人的广告标题和简短描述。
+        
+        产品名称：{product_name}
+        产品描述：{product_description}
+        目标受众：{target_audience}
+        
+        要求：
+        1. 标题不超过15个字
+        2. 描述不超过30个字
+        3. 语言自然、吸引人
+        4. 突出产品核心价值
+        
+        输出格式：
+        标题：[广告标题]
+        描述：[广告描述]
+        """
+        
+        # 调用LLM API
+        response = await openai.ChatCompletion.acreate(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "你是一个广告文案专家，擅长创作简洁有力的广告标题和描述。"},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=100,
+            temperature=0.7
+        )
+        
+        content = response.choices[0].message.content.strip()
+        
+        # 解析输出
+        title_match = re.search(r"标题：(.+)", content)
+        desc_match = re.search(r"描述：(.+)", content)
+        
+        title = title_match.group(1).strip() if title_match else fallback_title or product_name
+        description = desc_match.group(1).strip() if desc_match else product_description[:30]
+        
+        return {
+            "title": title,
+            "description": description,
+            "generated": True
+        }
+    except Exception as e:
+        logger.error(f"Error generating ad creative: {e}")
+        return {
+            "title": fallback_title or product_name,
+            "description": product_description[:30],
+            "generated": False
+        }
+```
+
+## 模型部署与服务
+
+### 模型加载与预测
+
+```python
+# services/rec/predictor.py 示例
+class CTRPredictor:
+    def __init__(self):
+        self.model = None
+        self.model_version = None
+        self.load_model()
+    
+    def load_model(self):
+        """从MLflow加载最新的生产模型"""
+        try:
+            # 获取最新的生产模型
+            client = MlflowClient()
+            model_name = "ctr_model"
+            
+            # 获取生产版本
+            production_model = None
+            for mv in client.search_model_versions(f"name='{model_name}'"):
+                if mv.current_stage == "Production":
+                    production_model = mv
+                    break
+            
+            if not production_model:
+                # 没有生产版本，获取最新版本
+                versions = client.search_model_versions(f"name='{model_name}'")
+                if versions:
+                    production_model = sorted(
+                        versions,
+                        key=lambda x: int(x.version),
+                        reverse=True
+                    )[0]
+            
+            if not production_model:
+                logger.warning("No CTR model found in MLflow")
+                return
+            
+            # 加载模型
+            model_uri = f"models:/{model_name}/{production_model.version}"
+            self.model = mlflow.lightgbm.load_model(model_uri)
+            self.model_version = production_model.version
+            
+            logger.info(f"Loaded CTR model version {self.model_version}")
+        except Exception as e:
+            logger.error(f"Error loading CTR model: {e}")
+    
+    async def predict(self, features: dict) -> float:
+        """预测CTR"""
+        if not self.model:
+            return 0.5
+        
+        try:
+            # 转换特征为模型输入格式
+            df = pd.DataFrame([features])
+            
+            # 预测
+            pred = self.model.predict_proba(df)[0, 1]
+            return float(pred)
+        except Exception as e:
+            logger.error(f"Error predicting CTR: {e}")
+            return 0.5
+
+# 单例模式
+ctr_predictor = CTRPredictor()
+
+async def predict_ctr(user_id: int, item_id: int, context: dict = None) -> float:
+    """预测用户对内容的点击概率"""
+    # 获取用户特征
+    user_features = await get_user_features(user_id)
+    
+    # 获取内容特征
+    item_features = await get_item_features(item_id)
+    
+    # 合并特征
+    features = {**user_features, **item_features}
+    
+    # 添加上下文特征
+    if context:
+        features.update(context)
+    
+    # 预测
+    return await ctr_predictor.predict(features)
+```
+
+## 下一步
+
+通过本章的学习，您已经了解了Mini-Feeds中的机器学习组件，包括推荐系统、向量检索和大模型应用。在接下来的章节中，我们将深入探讨[核心功能](/docs/2-core-features)的实现细节，包括信息流、事件上报和用户交互等功能。
