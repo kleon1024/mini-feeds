@@ -1,0 +1,151 @@
+{
+  "dag": {
+    "id": "feed_rec",
+    "name": "信息流推荐DAG",
+    "description": "单体裁内容推荐流程，包括多路召回、排序和重排"
+  },
+  "nodes": {
+    "tag_recall": {
+      "type": "src.services.rec.nodes.recall.TagRecallNode",
+      "name": "标签召回",
+      "description": "基于用户兴趣标签的内容召回",
+      "enabled": true,
+      "recall_size": 100,
+      "tag_weight_decay": 0.9,
+      "min_tag_match": 1,
+      "max_tag_match": 3
+    },
+    "popular_recall": {
+      "type": "src.services.rec.nodes.recall.PopularRecallNode",
+      "name": "热门召回",
+      "description": "基于全局热度的内容召回",
+      "enabled": true,
+      "recall_size": 100,
+      "time_window": "1d",
+      "metrics": ["pv", "like", "comment"],
+      "weights": {
+        "pv": 1.0,
+        "like": 3.0,
+        "comment": 5.0
+      }
+    },
+    "vector_recall": {
+      "type": "src.services.rec.nodes.recall.VectorRecallNode",
+      "name": "向量召回",
+      "description": "基于内容向量相似度的召回",
+      "enabled": true,
+      "recall_size": 100,
+      "vector_field": "emb",
+      "distance_metric": "cosine",
+      "min_score": 0.7
+    },
+    "multi_hop_recall": {
+      "type": "src.services.rec.nodes.recall.MultiHopRecallNode",
+      "name": "多跳召回",
+      "description": "基于用户交互关系网络的多跳召回",
+      "enabled": true,
+      "recall_size": 100,
+      "max_hops": 2,
+      "relation_types": ["like", "favorite"],
+      "hop_decay": 0.5
+    },
+    "random_recall": {
+      "type": "src.services.rec.nodes.recall.RandomRecallNode",
+      "name": "随机召回",
+      "description": "随机召回内容，用于冷启动或降级策略",
+      "enabled": true,
+      "recall_size": 50,
+      "content_types": ["content", "ad", "product"]
+    },
+    "recall_merge": {
+      "type": "src.services.rec.nodes.blend.SnakeMergeNode",
+      "name": "召回结果合并",
+      "description": "合并多个召回源的结果",
+      "enabled": true,
+      "output_size": 200,
+      "source_weights": {
+        "tag_recall": 0.4,
+        "popular_recall": 0.3,
+        "vector_recall": 0.2,
+        "multi_hop_recall": 0.1,
+        "random_recall": 0.05
+      },
+      "deduplicate": true,
+      "random_start": true
+    },
+    "pre_rank": {
+      "type": "src.services.rec.nodes.rank.PreRankNode",
+      "name": "粗排",
+      "description": "对召回结果进行初步排序，减少精排压力",
+      "enabled": true,
+      "rank_size": 200,
+      "feature_fields": ["title", "tags", "author_id", "created_at"],
+      "model_type": "rule",
+      "rule_weights": {
+        "recency": 0.7,
+        "popularity": 0.3
+      }
+    },
+    "feature_extract": {
+      "type": "src.services.rec.nodes.rank.feature_extract.FeatureExtractNode",
+      "name": "特征抽取",
+      "description": "为排序准备特征",
+      "enabled": true,
+      "rank_size": 100,
+      "feature_groups": ["user", "item", "context", "cross"],
+      "cache_ttl": 300
+    },
+    "rank": {
+      "type": "src.services.rec.nodes.rank.RankNode",
+      "name": "精排",
+      "description": "使用机器学习模型进行精确排序",
+      "enabled": true,
+      "rank_size": 50,
+      "model_type": "gbdt",
+      "model_path": "models/gbdt_rank_v1",
+      "score_field": "rank_score"
+    },
+    "filter": {
+      "type": "src.services.rec.nodes.filter.basic_filter.BasicFilterNode",
+      "name": "过滤",
+      "description": "过滤不合适的内容",
+      "enabled": true,
+      "filter_rules": ["block", "duplicate", "low_quality"],
+      "quality_threshold": 0.3
+    },
+    "rerank": {
+      "type": "src.services.rec.nodes.rank.ReRankNode",
+      "name": "重排",
+      "description": "考虑多样性的重新排序",
+      "enabled": true,
+      "rank_size": 30,
+      "model_type": "diversity",
+      "model_path": "models/diversity_rerank_v1",
+      "diversity_weight": 0.2,
+      "diversity_fields": ["tags", "author_id"],
+      "max_items_per_key": {
+        "author_id": 2,
+        "tags": 3
+      },
+      "n_out_m": {
+        "enabled": false,
+        "n": 1,
+        "m": 5,
+        "key": "author_id"
+      }
+    }
+  },
+  "edges": {
+    "tag_recall": ["recall_merge"],
+    "popular_recall": ["recall_merge"],
+    "vector_recall": ["recall_merge"],
+    "multi_hop_recall": ["recall_merge"],
+    "random_recall": ["recall_merge"],
+    "recall_merge": ["pre_rank"],
+    "pre_rank": ["feature_extract"],
+    "feature_extract": ["rank"],
+    "rank": ["filter"],
+    "filter": ["rerank"]
+  },
+  "entry_nodes": ["tag_recall", "popular_recall", "vector_recall", "multi_hop_recall", "random_recall"]
+}
